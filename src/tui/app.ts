@@ -1,14 +1,17 @@
 import { createElement, useEffect, useReducer, useRef, useState } from "react";
-import { useApp, useInput } from "ink";
+import { useApp, useInput, useWindowSize } from "ink";
 import { runCommand, VERSION } from "../cli/commands.ts";
 import { tokenizeLine } from "../cli/repl.ts";
-import { candidatesFor, lastToken } from "./completions.ts";
+import { allElements } from "../core/elements.ts";
+import { candidatesFor, commandNames, lastToken } from "./completions.ts";
 import { keyToAction } from "./keymap.ts";
+import { layout } from "./layout.ts";
+import { guideSections, Guide } from "./guide.ts";
 import { filterPalette, paletteItems } from "./palette-list.ts";
-import { loadConfig, loadHistory, saveHistory } from "./persist.ts";
+import { loadConfig, loadHistory, saveConfig, saveHistory } from "./persist.ts";
 import { initialState, reducer, type TuiConfig } from "./state.ts";
 import { box, text } from "./el.ts";
-import { Banner } from "./banner.ts";
+import { Banner, EngineInfo } from "./banner.ts";
 import { Footer } from "./footer.ts";
 import { InputBar } from "./inputbar.ts";
 import { Palette } from "./palette.ts";
@@ -22,6 +25,7 @@ export interface AppProps {
 
 export function App({ config, historySeed }: AppProps) {
   const { exit } = useApp();
+  const { rows, columns } = useWindowSize();
   const cfg = config ?? loadConfig();
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(cfg, historySeed ?? loadHistory()));
   const [running, setRunning] = useState(false);
@@ -29,13 +33,23 @@ export function App({ config, historySeed }: AppProps) {
   const completionRef = useRef({ token: "", cycle: 0 });
   const exitArmed = useRef(false);
 
-  // Persist command history whenever it changes.
+  const lay = layout(rows, columns, state.guideOn, cfg.resultLimit);
+
+  // Persist command history and the guide preference when they change.
   useEffect(() => {
     saveHistory(state.inputHistory);
   }, [state.inputHistory]);
+  useEffect(() => {
+    saveConfig({ resultLimit: cfg.resultLimit, bannerOn: cfg.bannerOn, guideOn: state.guideOn });
+  }, [state.guideOn, cfg.bannerOn, cfg.resultLimit]);
 
   const palette = state.paletteOpen ? filterPalette(paletteItems(), state.paletteQuery) : [];
   const paletteIdx = palette.length > 0 ? state.paletteIndex % palette.length : 0;
+  const sections = guideSections({
+    version: VERSION,
+    commands: commandNames(),
+    elementCount: allElements().length,
+  });
 
   async function execute(line: string): Promise<void> {
     const trimmed = line.trim();
@@ -119,6 +133,9 @@ export function App({ config, historySeed }: AppProps) {
         exitArmed.current = true;
         setStatus("Press Ctrl+C again to exit.");
         return;
+      case "toggle-guide":
+        dispatch({ type: "toggle-guide" });
+        return;
       case "complete": {
         const token = lastToken(state.input);
         const candidates = candidatesFor(state.input);
@@ -135,7 +152,7 @@ export function App({ config, historySeed }: AppProps) {
         dispatch({ type: "history-down" });
         return;
       case "scroll-up":
-        dispatch({ type: "scroll-up" });
+        dispatch({ type: "scroll-up", page: lay.pageSize });
         return;
       case "scroll-down":
         dispatch({ type: "scroll-down" });
@@ -173,23 +190,31 @@ export function App({ config, historySeed }: AppProps) {
     }
   });
 
+  // Fixed full-screen layout: header pinned top, input + footer pinned bottom,
+  // middle region owns all scrolling. Chrome adapts to terminal size.
   return box(
-    { flexDirection: "column" },
-    cfg.bannerOn ? createElement(Banner, { version: VERSION }) : null,
+    { flexDirection: "column", height: rows },
+    lay.showBanner ? createElement(Banner, { version: VERSION }) : null,
+    lay.showInfo ? createElement(EngineInfo, { elementCount: allElements().length }) : null,
     box(
-      { flexGrow: 1, flexDirection: "column" },
-      createElement(ResultPane, {
-        results: state.results,
-        limit: cfg.resultLimit,
-        scrollOffset: state.scrollOffset,
-      }),
+      { flexGrow: 1, flexDirection: "column", overflowY: "hidden" },
+      box(
+        { flexDirection: "row", flexGrow: 1 },
+        box(
+          { flexGrow: 1, flexDirection: "column", overflowY: "hidden" },
+          createElement(ResultPane, {
+            results: state.results,
+            limit: lay.pageSize,
+            scrollOffset: state.scrollOffset,
+          }),
+        ),
+        lay.showGuide ? createElement(Guide, { sections, width: lay.guideWidth }) : null,
+      ),
+      state.paletteOpen ? createElement(Palette, { items: palette, index: paletteIdx, query: state.paletteQuery }) : null,
+      running ? box({ paddingX: 1 }, createElement(Spinner, { label: "computing…" })) : null,
+      status !== undefined ? box({ paddingX: 1 }, text({ color: "yellow" }, status)) : null,
     ),
-    state.paletteOpen
-      ? createElement(Palette, { items: palette, index: paletteIdx, query: state.paletteQuery })
-      : null,
-    running ? box({ paddingX: 1 }, createElement(Spinner, { label: "computing…" })) : null,
     createElement(InputBar, { value: state.input, cursor: state.cursor }),
-    status !== undefined ? box({ paddingX: 1 }, text({ color: "yellow" }, status)) : null,
-    createElement(Footer, {}),
+    lay.showInfo ? createElement(Footer, {}) : null,
   );
 }

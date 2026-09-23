@@ -32,6 +32,7 @@ export type KeyAction =
   | "scroll-up"
   | "scroll-down"
   | "clear-results"
+  | "toggle-guide"
   | "backspace"
   | "delete"
   | "left"
@@ -56,6 +57,7 @@ export function keyToAction(input: string, key: PressedKey): KeyAction | null {
   if (key.rightArrow) return "right";
   if (key.ctrl && input.toLowerCase() === "c") return "exit";
   if (key.ctrl && input.toLowerCase() === "l") return "clear-results";
+  if (key.ctrl && input.toLowerCase() === "g") return "toggle-guide";
   if (input.length > 0) return "insert";
   return null;
 }

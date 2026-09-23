@@ -7,6 +7,8 @@ import { keyToAction, type PressedKey } from "../src/tui/keymap.ts";
 import { candidatesFor, commandNames, lastToken } from "../src/tui/completions.ts";
 import { filterPalette, paletteItems } from "../src/tui/palette-list.ts";
 import { historyPath, loadConfig, loadHistory, saveConfig, saveHistory } from "../src/tui/persist.ts";
+import { layout, MIN_CHROME_ROWS, MIN_GUIDE_COLUMNS } from "../src/tui/layout.ts";
+import { guideSections } from "../src/tui/guide.ts";
 
 function press(p: PressedKey, input = ""): { input: string; key: PressedKey } {
   return { input, key: p };
@@ -33,6 +35,7 @@ describe("TUI keymap", () => {
     expect(keyToAction("c", { ctrl: true })).toBe("exit");
     expect(keyToAction("C", { ctrl: true, shift: true })).toBe("exit");
     expect(keyToAction("l", { ctrl: true })).toBe("clear-results");
+    expect(keyToAction("g", { ctrl: true })).toBe("toggle-guide");
   });
 
   it("falls through to text insertion", () => {
@@ -96,18 +99,18 @@ describe("TUI reducer", () => {
     expect(s.input).toBe("element");
   });
 
-  it("scrolling clamps to the configurable result window", () => {
+  it("scrolling clamps to the scroll page", () => {
     const s0 = initialState(DEFAULT_CONFIG, []);
     let s = s0;
     for (let i = 0; i < 12; i++) {
       s = reducer(s, { type: "submit", command: `cmd${i}`, output: `out${i}`, ok: true });
     }
-    // 12 results, limit 8 → 4 extra available above the window.
-    s = reducer(s, { type: "scroll-up" });
+    // 12 results, page 8 → 4 extra available above the window.
+    s = reducer(s, { type: "scroll-up", page: 8 });
     expect(s.scrollOffset).toBe(1);
-    for (let i = 0; i < 10; i++) s = reducer(s, { type: "scroll-up" });
+    for (let i = 0; i < 10; i++) s = reducer(s, { type: "scroll-up", page: 8 });
     expect(s.scrollOffset).toBe(4);
-    s = reducer(s, { type: "scroll-up" });
+    s = reducer(s, { type: "scroll-up", page: 8 });
     expect(s.scrollOffset).toBe(4); // clamped
     s = reducer(s, { type: "scroll-down" });
     expect(s.scrollOffset).toBe(3);
@@ -122,6 +125,15 @@ describe("TUI reducer", () => {
     s = reducer(s, { type: "palette-select-into-input", command: "balance" });
     expect(s.paletteOpen).toBe(false);
     expect(s.input).toBe("balance ");
+  });
+
+  it("toggles the guide panel", () => {
+    let s = initialState();
+    expect(s.guideOn).toBe(true);
+    s = reducer(s, { type: "toggle-guide" });
+    expect(s.guideOn).toBe(false);
+    s = reducer(s, { type: "toggle-guide" });
+    expect(s.guideOn).toBe(true);
   });
 
   it("clears results", () => {
@@ -167,6 +179,61 @@ describe("TUI palette list", () => {
   });
 });
 
+describe("TUI layout math", () => {
+  it("shows all chrome on a large terminal", () => {
+    const l = layout(40, 160, true, 8);
+    expect(l.showBanner).toBe(true);
+    expect(l.showInfo).toBe(true);
+    expect(l.showGuide).toBe(true);
+    expect(l.guideWidth).toBeGreaterThanOrEqual(30);
+    expect(l.pageSize).toBeGreaterThanOrEqual(4);
+  });
+
+  it("hides the guide on narrow terminals", () => {
+    const l = layout(40, MIN_GUIDE_COLUMNS - 1, true, 8);
+    expect(l.showGuide).toBe(false);
+    expect(l.guideWidth).toBe(0);
+  });
+
+  it("hides the guide when toggled off", () => {
+    const l = layout(40, 200, false, 8);
+    expect(l.showGuide).toBe(false);
+  });
+
+  it("hides the info strip + footer on short terminals but keeps a scroll page", () => {
+    const l = layout(MIN_CHROME_ROWS - 1, 200, true, 8);
+    expect(l.showBanner).toBe(true);
+    expect(l.showInfo).toBe(false);
+    expect(l.pageSize).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps a minimum page size even on tiny terminals", () => {
+    const l = layout(5, 40, true, 8);
+    expect(l.pageSize).toBe(1);
+  });
+
+  it("caps the page size at the configured result limit", () => {
+    const l = layout(60, 200, true, 3);
+    expect(l.pageSize).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("TUI guide content", () => {
+  it("builds sections from the command registry and engine facts", () => {
+    const sections = guideSections({ version: "0.2.0", commands: ["balance", "element"], elementCount: 118 });
+    const titles = sections.map((s) => s.title);
+    expect(titles).toEqual(["Commands", "Keys", "Engine"]);
+    const commands = sections[0]!.lines.join("\n");
+    expect(commands).toContain("balance");
+    expect(commands).toContain("element");
+    const keys = sections[1]!.lines.join("\n");
+    expect(keys).toContain("^G show/hide this guide");
+    const engine = sections[2]!.lines.join("\n");
+    expect(engine).toContain("118 elements embedded");
+    expect(engine).toContain("v0.2.0");
+  });
+});
+
 describe("TUI persistence", () => {
   const dir = mkdtempSync(join(tmpdir(), "chemengine-test-"));
 
@@ -180,8 +247,8 @@ describe("TUI persistence", () => {
   });
 
   it("round-trips config", () => {
-    saveConfig({ resultLimit: 4, bannerOn: false }, dir);
-    expect(loadConfig(dir)).toEqual({ resultLimit: 4, bannerOn: false });
+    saveConfig({ resultLimit: 4, bannerOn: false, guideOn: false }, dir);
+    expect(loadConfig(dir)).toEqual({ resultLimit: 4, bannerOn: false, guideOn: false });
   });
 
   it("caps history and persists it", () => {
@@ -198,7 +265,7 @@ describe("TUI persistence", () => {
   it("silently tolerates corrupt files", () => {
     const badDir = mkdtempSync(join(tmpdir(), "chemengine-bad-"));
     try {
-      saveConfig({ resultLimit: 1, bannerOn: true }, badDir);
+      saveConfig({ resultLimit: 1, bannerOn: true, guideOn: true }, badDir);
       // Sabotage the config file so JSON.parse throws.
       writeFileSync(join(badDir, "config.json"), "{not json");
       expect(loadConfig(badDir)).toEqual(DEFAULT_CONFIG);

@@ -9,3 +9,15 @@ export function Banner({ version }: { version: string }) {
     createElement(Text, { dimColor: true }, "autonomous · offline · local"),
   );
 }
+
+/** Slim one-line strip under the banner with quick engine facts. */
+export function EngineInfo({ elementCount }: { elementCount: number }) {
+  return box(
+    { paddingX: 2 },
+    createElement(
+      Text,
+      { dimColor: true, wrap: "truncate" },
+      `◆ ${elementCount} elements embedded · exact balancer · offline · no network`,
+    ),
+  );
+}

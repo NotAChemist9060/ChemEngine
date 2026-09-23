@@ -5,9 +5,11 @@ export interface TuiConfig {
   resultLimit: number;
   /** Show the banner header. */
   bannerOn: boolean;
+  /** Show the right-hand guide panel when the terminal is wide enough. */
+  guideOn: boolean;
 }
 
-export const DEFAULT_CONFIG: TuiConfig = { resultLimit: 8, bannerOn: true };
+export const DEFAULT_CONFIG: TuiConfig = { resultLimit: 8, bannerOn: true, guideOn: true };
 
 export const HISTORY_LIMIT = 500;
 
@@ -35,6 +37,8 @@ export interface TuiState {
   paletteQuery: string;
   paletteIndex: number;
   nextResultId: number;
+  /** Guide panel visibility (runtime toggle, seeded from config). */
+  guideOn: boolean;
   config: TuiConfig;
 }
 
@@ -50,6 +54,7 @@ export function initialState(config: TuiConfig = DEFAULT_CONFIG, seedHistory: st
     paletteQuery: "",
     paletteIndex: 0,
     nextResultId: 1,
+    guideOn: config.guideOn,
     config,
   };
 }
@@ -67,8 +72,9 @@ export type TuiAction =
   | { type: "submit"; command: string; output: string; ok: boolean }
   | { type: "clear-input" }
   | { type: "clear-results" }
-  | { type: "scroll-up" }
+  | { type: "scroll-up"; page: number }
   | { type: "scroll-down" }
+  | { type: "toggle-guide" }
   | { type: "palette-toggle" }
   | { type: "palette-close" }
   | { type: "palette-up" }
@@ -136,11 +142,14 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
     case "clear-results":
       return { ...state, results: [], scrollOffset: 0 };
     case "scroll-up": {
-      const maxOffset = Math.max(0, state.results.length - state.config.resultLimit);
+      const page = Math.max(1, action.page);
+      const maxOffset = Math.max(0, state.results.length - page);
       return state.scrollOffset < maxOffset ? { ...state, scrollOffset: state.scrollOffset + 1 } : state;
     }
     case "scroll-down":
       return state.scrollOffset > 0 ? { ...state, scrollOffset: state.scrollOffset - 1 } : state;
+    case "toggle-guide":
+      return { ...state, guideOn: !state.guideOn };
     case "palette-toggle":
       return state.paletteOpen
         ? { ...state, paletteOpen: false }

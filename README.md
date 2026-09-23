@@ -61,6 +61,7 @@ Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack 
 | `PgUp / PgDn` | scroll result history |
 | `/` | open the command palette (fuzzy filter, `Enter` picks) |
 | `Ctrl+L` | clear result history |
+| `Ctrl+G` | show/hide the guide panel |
 | `Esc` | clear input / close palette |
 | `Ctrl+C` | exit (again when the input is non-empty) |
 
@@ -68,12 +69,13 @@ Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack 
 - Results render as bordered cards — green for success, red for errors — and persist across the session (scrollable).
 - **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
 - A spinner shows while a command computes (used by the upcoming `simulate`).
+- The console adapts to your terminal: on wide screens a **guide panel** (commands, keys, engine facts) docks on the right; on short terminals the banner/info/footer chrome collapses to keep the input line and results on screen.
 
 ### Configuration & history
 
 Preferences and command history live in `~/.chemengine/`:
 
-- `config.json` — `{"resultLimit": 8, "bannerOn": true}`
+- `config.json` — `{"resultLimit": 8, "bannerOn": true, "guideOn": true}`
 - `history.json` — last 500 commands, recalled with `↑` across sessions
 
 Edit `config.json` (or delete it to reset). Commands also work **non-interactively**: when stdin isn't a terminal (pipes, CI), `chem` automatically degrades to a plain REPL; with arguments it runs one command and exits.

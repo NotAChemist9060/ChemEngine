@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "ink";
-import { Banner } from "../src/tui/banner.ts";
+import { Banner, EngineInfo } from "../src/tui/banner.ts";
 import { Footer } from "../src/tui/footer.ts";
+import { Guide, guideSections } from "../src/tui/guide.ts";
 import { InputBar } from "../src/tui/inputbar.ts";
 import { Palette } from "../src/tui/palette.ts";
 import { ResultPane } from "../src/tui/resultpane.ts";
@@ -20,9 +21,25 @@ describe("TUI presentation layer", () => {
     expect(out).toContain("╔"); // double border
   });
 
+  it("renders the engine info strip", () => {
+    const out = render(createElement(EngineInfo, { elementCount: 118 }));
+    expect(out).toContain("118 elements embedded");
+    expect(out).toContain("no network");
+  });
+
+  it("renders the guide panel with sections", () => {
+    const sections = guideSections({ version: "0.2.0", commands: ["balance", "element"], elementCount: 118 });
+    const out = render(createElement(Guide, { sections, width: 40 }));
+    expect(out).toContain("GUIDE");
+    expect(out).toContain("Commands");
+    expect(out).toContain("^G show/hide this guide");
+    expect(out).toContain("118 elements embedded");
+    expect(out).toContain("┌"); // single border
+  });
+
   it("renders the footer key hints", () => {
     const out = render(createElement(Footer, {}));
-    expect(out).toContain("Tab complete");
+    expect(out).toContain("Tab ·");
     expect(out).toContain("^C exit");
   });
 
