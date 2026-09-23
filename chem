@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# ChemEngine local launcher (Unix) — no global install needed.
+cd "$(dirname "$0")"
+exec node "$(dirname "$0")/src/cli/index.ts" "$@"

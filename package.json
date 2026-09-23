@@ -4,6 +4,9 @@
   "description": "Autonomous offline chemical simulation engine: classify species, predict reactions, rank by ΔG, simulate kinetics.",
   "type": "module",
   "private": true,
+  "bin": {
+    "chem": "src/cli/index.ts"
+  },
   "engines": {
     "node": ">=20"
   },
