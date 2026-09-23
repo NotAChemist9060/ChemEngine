@@ -17,8 +17,8 @@ npm run typecheck       # strict TypeScript check
 
 | Milestone | Scope | Status |
 |---|---|---|
-| M0 | Scaffold: TS strict + vitest + tsx, CLI skeleton, periodic table data wired | **in progress** |
-| M1 | Core math: rationals, units (mol/L/s), formula/equation parsers, equation balancer | planned |
+| M0 | Scaffold: TS strict + vitest + tsx, CLI skeleton, periodic table data wired | ✅ done |
+| M1 | Core math: rationals, units (mol/L/s), formula/equation parsers, equation balancer | ✅ done |
 | M2 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
 | M3 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M4 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
