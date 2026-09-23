@@ -24,7 +24,7 @@ npm run typecheck       # strict TypeScript check
 | M4 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
 | M5 | Extensions: SMILES parser, Arrhenius/temperature, particle engine, web UI | future |
 
-See `C:\Users\G4SL33K\.opencode\plan\chemengine-plan.md` for the full plan.
+See the plan document (architecture, milestone details, decisions) for the full roadmap.
 
 ## Layout
 
