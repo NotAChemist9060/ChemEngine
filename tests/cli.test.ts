@@ -28,7 +28,7 @@ function consoleRun(input: string): { out: string; status: number } {
 
 describe("CLI one-shot", () => {
   it("shows help", () => {
-    expect(cli("--help")).toContain("ChemEngine v0.1.0");
+    expect(cli("--help")).toContain("ChemEngine v0.2.0");
   });
 
   it("balances methane combustion end-to-end", () => {
@@ -52,8 +52,12 @@ describe("CLI interactive console", () => {
   it("runs commands from piped stdin", () => {
     const { out, status } = consoleRun("help\nbalance CH4 + O2 -> CO2 + H2O\nexit\n");
     expect(status).toBe(0);
-    expect(out).toContain("ChemEngine v0.1.0");
+    expect(out).toContain("ChemEngine v0.2.0");
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");
+  });
+
+  it("prints the version on --version", () => {
+    expect(cli("--version").trim()).toBe("0.2.0");
   });
 
   it("suggests commands on typos", () => {

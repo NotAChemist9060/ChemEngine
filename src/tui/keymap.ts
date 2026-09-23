@@ -1,0 +1,61 @@
+/**
+ * Key → action mapping for the console TUI. Kept framework-agnostic (no ink
+ * import) so it is trivially unit-testable: Ink's Key is structurally a
+ * superset of PressedKey.
+ */
+export interface PressedKey {
+  upArrow?: boolean;
+  downArrow?: boolean;
+  leftArrow?: boolean;
+  rightArrow?: boolean;
+  pageUp?: boolean;
+  pageDown?: boolean;
+  home?: boolean;
+  end?: boolean;
+  return?: boolean;
+  escape?: boolean;
+  ctrl?: boolean;
+  shift?: boolean;
+  tab?: boolean;
+  backspace?: boolean;
+  delete?: boolean;
+  meta?: boolean;
+}
+
+export type KeyAction =
+  | "submit"
+  | "cancel"
+  | "exit"
+  | "complete"
+  | "history-up"
+  | "history-down"
+  | "scroll-up"
+  | "scroll-down"
+  | "clear-results"
+  | "backspace"
+  | "delete"
+  | "left"
+  | "right"
+  | "home"
+  | "end"
+  | "insert";
+
+export function keyToAction(input: string, key: PressedKey): KeyAction | null {
+  if (key.return) return "submit";
+  if (key.escape) return "cancel";
+  if (key.tab) return "complete";
+  if (key.backspace) return "backspace";
+  if (key.delete) return "delete";
+  if (key.upArrow) return "history-up";
+  if (key.downArrow) return "history-down";
+  if (key.pageUp) return "scroll-up";
+  if (key.pageDown) return "scroll-down";
+  if (key.home) return "home";
+  if (key.end) return "end";
+  if (key.leftArrow) return "left";
+  if (key.rightArrow) return "right";
+  if (key.ctrl && input.toLowerCase() === "c") return "exit";
+  if (key.ctrl && input.toLowerCase() === "l") return "clear-results";
+  if (input.length > 0) return "insert";
+  return null;
+}

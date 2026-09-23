@@ -4,7 +4,7 @@ Autonomous, fully offline chemical simulation engine.
 
 ChemEngine takes chemistry *inputs* — formulas, equations, species — and does the math. Eventually it will also *propose* reactions from reactants alone, judge feasibility via Gibbs free energy, and simulate reaction kinetics. Everything runs locally; all knowledge is embedded data + code, no network access.
 
-**Implemented today:** formula parsing, equation parsing, exact equation balancing, periodic table queries, dimensional analysis (mol/L/s), and a friendly interactive console — behind a small CLI and a scriptable API.
+**Implemented today:** formula parsing, equation parsing, exact equation balancing, periodic table queries, dimensional analysis (mol/L/s), a beautiful Ink-based console TUI (hotkeys, command palette, history), plus a plain REPL + one-shot CLI and a scriptable API.
 
 ## Requirements
 
@@ -16,6 +16,8 @@ ChemEngine takes chemistry *inputs* — formulas, equations, species — and doe
 ```sh
 npm install
 ```
+
+Runtime dependencies for the terminal UI: `ink` + `react` (presentation only — the chemistry engine itself stays dependency-free).
 
 ### The `chem` command
 
@@ -29,32 +31,52 @@ Three ways to run the CLI, no `npm run` ceremony:
 
 `npm test` and `npm run typecheck` work as usual.
 
-## Interactive console
+## Interactive console (TUI)
 
-Run `chem` with **no arguments** to drop into the REPL:
+Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
-$ chem
-chem> balance CH4 + O2 -> CO2 + H2O
-CH4 + 2O2 -> CO2 + 2H2O
-
-Stoichiometry:
-  1 x CH4         16.043 g/mol
-  2 x O2          31.998 g/mol
-  1 x CO2         44.009 g/mol
-  2 x H2O         18.015 g/mol
-
-Conserved elements: C, H, O
-chem>
+╔══════════════════════════════════════════════════════════════════╗
+║  ChemEngine v0.2.0                autonomous · offline · local   ║
+╚══════════════════════════════════════════════════════════════════╝
+ ╭──────────────────────────────────────────────────────────────────╮
+ │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
+ │ CH4 + 2O2 -> CO2 + 2H2O                                         │
+ │ Stoichiometry: 1 x CH4 16.043 g/mol · 2 x O2 31.998 g/mol …     │
+ ╰──────────────────────────────────────────────────────────────────╯
+ chem> balance CH4 + O2 -> CO2 + H2O
+ ┌──────────────────────────────────────────────────────────────────┐
+ │ ↵ run · Tab complete · / palette · ↑↓ history · PgUp/PgDn results│
+ │  · ^L clear · ^C exit                                            │
+ └──────────────────────────────────────────────────────────────────┘
 ```
+
+Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack as OpenCode):
+
+| Key | Action |
+|---|---|
+| `Enter` | run the current input |
+| `Tab` / `Shift+Tab` | cycle completion (commands → element symbols) |
+| `↑ / ↓` | recall previous/next command |
+| `PgUp / PgDn` | scroll result history |
+| `/` | open the command palette (fuzzy filter, `Enter` picks) |
+| `Ctrl+L` | clear result history |
+| `Esc` | clear input / close palette |
+| `Ctrl+C` | exit (again when the input is non-empty) |
 
 - Type commands **raw** — no quotes, no shell escaping (`+`, `->`, `<=>` are safe here).
-- **`help`** — in-console guide for every command; `help balance` for one command.
-- **`examples`** — runs several demos live so you can see expected output.
-- **`clear`** clears the screen; **`exit`** / **`quit`** (or Ctrl+D) leaves.
-- **Multi-line input** — an unclosed parenthesis continues on the next line.
-- **History** — up/down arrows recall previous lines (TTY only).
-- **Colors** — ANSI styling when attached to a terminal, plain text when piped (or with `NO_COLOR` set).
+- Results render as bordered cards — green for success, red for errors — and persist across the session (scrollable).
+- **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
+- A spinner shows while a command computes (used by the upcoming `simulate`).
+
+### Configuration & history
+
+Preferences and command history live in `~/.chemengine/`:
+
+- `config.json` — `{"resultLimit": 8, "bannerOn": true}`
+- `history.json` — last 500 commands, recalled with `↑` across sessions
+
+Edit `config.json` (or delete it to reset). Commands also work **non-interactively**: when stdin isn't a terminal (pipes, CI), `chem` automatically degrades to a plain REPL; with arguments it runs one command and exits.
 
 ## One-shot usage
 
@@ -134,7 +156,7 @@ node example.ts      # Node 24+ runs TS natively
 # or: npx tsx example.ts
 ```
 
-(All imports use explicit `.ts` extensions, matching the `allowImportingTsExtensions` setting.)
+(All imports use explicit `.ts` extensions, matching the `allowImportingTsExtensions` setting. The TUI components render Ink via `createElement` in plain `.ts` files — Node type-stripping does not handle `.tsx`, so JSX is deliberately avoided to keep the no-build-step promise.)
 
 ## Units (mol/L/s)
 
@@ -163,6 +185,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M0 | Scaffold: TS strict + vitest, CLI skeleton, periodic table data wired | ✅ done |
 | M1 | Core math: rationals, units (mol/L/s), formula/equation parsers, equation balancer | ✅ done |
 | M2 | Console UX: real `chem` command, interactive REPL, in-console guide | ✅ done |
+| M2b | Console TUI: Ink UI (banner, result cards, footer), hotkeys + completion, `/` palette, result history, config persistence, TTY auto-fallback | ✅ done |
 | M3 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
 | M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
@@ -177,8 +200,10 @@ data/         embedded JSON data (periodic table; thermo table in M4)
 src/
   util/       rational + units                               [M1]
   core/       elements, formula, equation, balance           [M1]
-  cli/        console (REPL) + one-shot entry, commands,
+  cli/        console entry (TUI/REPL/one-shot), commands,
               rendering, suggestions                         [M1-2]
+  tui/        Ink TUI: app, state reducer, keymap,
+              completions, palette, persist, components      [M2b]
   structure/  molecule graphs, smiles interface              [M3 - planned]
   knowledge/  species classification                         [M3 - planned]
   rules/      reaction rule set + engine                     [M4 - planned]

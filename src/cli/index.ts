@@ -3,6 +3,7 @@
 import { runCommand, VERSION } from "./commands.ts";
 import { paint } from "./render.ts";
 import { startRepl } from "./repl.ts";
+import { startTui } from "../tui/index.ts";
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -10,9 +11,11 @@ function errMsg(err: unknown): string {
 
 function main(argv: string[]): void {
   const args = argv.slice(2);
-  // No arguments → interactive console.
+  // No arguments → pretty TUI when attached to a terminal, else the plain REPL
+  // (so pipelines and CI get clean, scriptable output).
   if (args.length === 0) {
-    startRepl();
+    if (process.stdin.isTTY && process.stdout.isTTY) startTui();
+    else startRepl();
     return;
   }
   const cmd = args[0];
