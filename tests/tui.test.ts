@@ -9,6 +9,7 @@ import { filterPalette, paletteItems } from "../src/tui/palette-list.ts";
 import { historyPath, loadConfig, loadHistory, saveConfig, saveHistory } from "../src/tui/persist.ts";
 import { layout, MIN_CHROME_ROWS, MIN_GUIDE_COLUMNS } from "../src/tui/layout.ts";
 import { guideSections } from "../src/tui/guide.ts";
+import { TUI_RENDER_OPTIONS } from "../src/tui/index.ts";
 
 function press(p: PressedKey, input = ""): { input: string; key: PressedKey } {
   return { input, key: p };
@@ -231,6 +232,15 @@ describe("TUI guide content", () => {
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
     expect(engine).toContain("v0.2.0");
+  });
+});
+
+describe("TUI render options", () => {
+  it("uses the alternate screen buffer so full-screen frames don't hit terminal scrollback", () => {
+    // Without alternateScreen, Ink 7 clears + redraws viewport-filling frames
+    // into the normal buffer (issue #969 workaround), which on Windows brings
+    // up a right-hand scrollbar and desyncs the input line.
+    expect(TUI_RENDER_OPTIONS).toEqual({ exitOnCtrlC: false, alternateScreen: true });
   });
 });
 

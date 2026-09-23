@@ -70,6 +70,7 @@ Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack 
 - **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
 - A spinner shows while a command computes (used by the upcoming `simulate`).
 - The console adapts to your terminal: on wide screens a **guide panel** (commands, keys, engine facts) docks on the right; on short terminals the banner/info/footer chrome collapses to keep the input line and results on screen.
+- The TUI runs in the terminal's **alternate screen buffer** (like `vim`/`htop`/`less`): no scrollback noise while it's running, and your previous shell content is restored when you exit.
 
 ### Configuration & history
 
