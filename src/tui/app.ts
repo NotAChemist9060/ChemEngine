@@ -5,7 +5,7 @@ import { tokenizeLine } from "../cli/repl.ts";
 import { allElements } from "../core/elements.ts";
 import { candidatesFor, commandNames, lastToken } from "./completions.ts";
 import { keyToAction } from "./keymap.ts";
-import { layout, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "./layout.ts";
+import { layout, viewHeight, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "./layout.ts";
 import { guideSections, Guide } from "./guide.ts";
 import { filterPalette, paletteItems } from "./palette-list.ts";
 import { loadConfig, loadHistory, saveConfig, saveHistory } from "./persist.ts";
@@ -36,7 +36,11 @@ export function App({ config, historySeed }: AppProps) {
   const completionRef = useRef({ token: "", cycle: 0 });
   const exitArmed = useRef(false);
 
-  const lay = layout(rows, columns, state.guideOn);
+  // One row under the terminal so Ink's incremental diff renderer is used (a
+  // fullscreen frame would make Ink force-clear the whole terminal every render
+  // on Windows — the visible blink while typing).
+  const viewRows = viewHeight(rows);
+  const lay = layout(viewRows, columns, state.guideOn);
 
   // Persist command history and the guide preference when they change.
   useEffect(() => {
@@ -218,7 +222,7 @@ export function App({ config, historySeed }: AppProps) {
   // flexShrink 0 so tall result stacks (or window resizes) can never squeeze
   // the input line away. The middle region owns all scrolling and clips.
   return box(
-    { flexDirection: "column", height: rows },
+    { flexDirection: "column", height: viewRows },
     createElement(MouseBridge, {
       ctx: { active: !state.paletteOpen, inputRow: lay.inputRow, inputLength: state.input.length },
       onIntent: onMouseIntent,

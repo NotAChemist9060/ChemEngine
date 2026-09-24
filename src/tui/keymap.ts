@@ -41,6 +41,13 @@ export type KeyAction =
   | "end"
   | "insert";
 
+/**
+ * SGR mouse report *tail* as delivered to useInput after Ink strips the leading
+ * ESC: `[<button;col;rowM` (press/wheel) or `[<button;col;rowm` (release).
+ * Dropped by the keymap so mouse bytes never insert into the input line.
+ */
+export const SGR_TAIL_RE = /^\[<\d+;\d+;\d+[Mm]$/;
+
 export function keyToAction(input: string, key: PressedKey): KeyAction | null {
   if (key.return) return "submit";
   if (key.escape) return "cancel";
@@ -59,6 +66,11 @@ export function keyToAction(input: string, key: PressedKey): KeyAction | null {
   // are not keystrokes and must never be inserted into the input line. A lone
   // ESC (length 1) still reaches the key.escape branch above.
   if (input.length > 1 && input.startsWith("\u001b")) return null;
+  // Ink strips the leading ESC from unknown sequences before they reach useInput
+  // (use-input.js "Strip escape prefix from broken/incomplete sequences"), so an
+  // SGR mouse report arrives as its bare tail (`[<0;12;20M` / `...m`). Drop those
+  // too — they must never be inserted as literal text.
+  if (SGR_TAIL_RE.test(input)) return null;
   if (key.ctrl && input.toLowerCase() === "c") return "exit";
   if (key.ctrl && input.toLowerCase() === "l") return "clear-results";
   if (key.ctrl && input.toLowerCase() === "g") return "toggle-guide";

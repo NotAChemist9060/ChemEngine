@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initialState, reducer, DEFAULT_CONFIG } from "../src/tui/state.ts";
-import { keyToAction, type PressedKey } from "../src/tui/keymap.ts";
+import { keyToAction, SGR_TAIL_RE, type PressedKey } from "../src/tui/keymap.ts";
 import { candidatesFor, commandNames, lastToken } from "../src/tui/completions.ts";
 import { filterPalette, paletteItems } from "../src/tui/palette-list.ts";
 import { historyPath, loadConfig, loadHistory, saveConfig, saveHistory } from "../src/tui/persist.ts";
@@ -49,6 +49,19 @@ describe("TUI keymap", () => {
     expect(keyToAction("\u001b[<65;5;8M", {})).toBeNull();
     expect(keyToAction("", { escape: true })).toBe("cancel");
     expect(keyToAction("\u001b[<0;3;7m", {})).toBeNull();
+  });
+
+  it("drops Ink-stripped SGR mouse tails so clicks never litter the input line", () => {
+    // Ink strips the leading ESC before useInput (use-input.js), so mouse
+    // reports arrive as bare tails — these must never become "insert".
+    expect(keyToAction("[<0;1;1M", {})).toBeNull(); // left press
+    expect(keyToAction("[<0;3;7m", {})).toBeNull(); // left release
+    expect(keyToAction("[<65;5;8M", {})).toBeNull(); // wheel down
+    expect(keyToAction("[<64;20;30M", {})).toBeNull(); // wheel up
+    // Guard regex sanity: it matches the tails above.
+    expect(SGR_TAIL_RE.test("[<0;1;1M")).toBe(true);
+    expect(SGR_TAIL_RE.test("[<0;3;7m")).toBe(true);
+    expect(SGR_TAIL_RE.test("hello")).toBe(false);
   });
 });
 
@@ -276,7 +289,7 @@ describe("TUI layout math", () => {
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -287,12 +300,12 @@ describe("TUI guide content", () => {
     expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.1");
+    expect(engine).toContain("v0.2.2");
   });
 
   it("keeps every guide line within the narrowest panel inner width", () => {
     // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
-    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 });
     for (const s of sections) {
       for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
     }

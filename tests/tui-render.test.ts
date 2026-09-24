@@ -7,7 +7,7 @@ import { Guide, guideSections } from "../src/tui/guide.ts";
 import { InputBar } from "../src/tui/inputbar.ts";
 import { Palette } from "../src/tui/palette.ts";
 import { ResultPane } from "../src/tui/resultpane.ts";
-import { layout, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "../src/tui/layout.ts";
+import { layout, viewHeight, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "../src/tui/layout.ts";
 import { box } from "../src/tui/el.ts";
 import type { ResultEntry } from "../src/tui/state.ts";
 
@@ -34,12 +34,15 @@ const THREE_SHORT = [
  * what the assertions rely on.
  */
 function renderFrame(rows: number, cols: number, guideOn: boolean, results: readonly ResultEntry[]): string {
-  const lay = layout(rows, cols, guideOn);
+  // Mirror app.ts: the frame is one row under the terminal (VIEW_PAD) so Ink
+  // uses incremental rendering instead of fullscreen force-clears.
+  const view = viewHeight(rows);
+  const lay = layout(view, cols, guideOn);
   const cardWidth = cols - lay.guideWidth - 2;
   const frame = box(
-    { flexDirection: "column", height: rows },
+    { flexDirection: "column", height: view },
     lay.showBanner
-      ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: "0.2.1" }))
+      ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: "0.2.2" }))
       : null,
     lay.showInfo
       ? box({ height: INFO_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(EngineInfo, { elementCount: 118 }))
@@ -55,7 +58,7 @@ function renderFrame(rows: number, cols: number, guideOn: boolean, results: read
             ),
             lay.showGuide
               ? createElement(Guide, {
-                  sections: guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 }),
+                  sections: guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 }),
                   width: lay.guideWidth,
                 })
               : null,
@@ -70,8 +73,8 @@ function renderFrame(rows: number, cols: number, guideOn: boolean, results: read
 
 describe("TUI presentation layer", () => {
   it("renders the banner with the version", () => {
-    const out = render(createElement(Banner, { version: "0.2.1" }));
-    expect(out).toContain("ChemEngine v0.2.1");
+    const out = render(createElement(Banner, { version: "0.2.2" }));
+    expect(out).toContain("ChemEngine v0.2.2");
     expect(out).toContain("autonomous · offline · local");
     expect(out).toContain("╔"); // double border
   });
@@ -83,7 +86,7 @@ describe("TUI presentation layer", () => {
   });
 
   it("renders the guide panel with sections", () => {
-    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 });
     const out = render(createElement(Guide, { sections, width: 40 }));
     expect(out).toContain("GUIDE");
     expect(out).toContain("Commands");
@@ -163,10 +166,12 @@ describe("TUI presentation layer", () => {
     }));
     const out = renderFrame(24, 160, true, tall);
     const lines = out.split("\n");
-    expect(lines).toHaveLength(24); // chrome pinned, center clipped to 14 rows
-    expect(lines[20]).toContain("chem>"); // input sits on line 20 (0-based)
-    expect(lines[21]).toContain("┌"); // footer top border
-    expect(lines[23]).toContain("└"); // footer bottom border
+    const view = viewHeight(24);
+    const lay = layout(view, 160, true);
+    expect(lines).toHaveLength(view); // chrome pinned one row under the terminal, center clipped
+    expect(lines[lay.inputRow - 1]).toContain("chem>"); // input pinned to the bottom chrome row
+    expect(lines[lay.inputRow]).toContain("┌"); // footer top border
+    expect(lines[view - 1]).toContain("└"); // footer bottom border
     expect(out).toMatch(/▲ \d+ rows above/); // scrolled-off rows are announced
     expect(out).toContain("╭"); // at least one result card is rendered (round border)
   });
@@ -182,10 +187,11 @@ describe("TUI presentation layer", () => {
       [60, 200],
     ] as const;
     for (const [rows, cols] of geometries) {
-      const lay = layout(rows, cols, true);
+      const view = viewHeight(rows);
+      const lay = layout(view, cols, true);
       const out = renderFrame(rows, cols, true, THREE_SHORT);
       const lines = out.split("\n");
-      expect(lines, `${rows}×${cols}`).toHaveLength(rows); // chrome can never exceed rows
+      expect(lines, `${rows}×${cols}`).toHaveLength(view); // chrome can never exceed the frame
       // Input is pinned to the bottom-most chrome row — never pushed off-screen.
       expect(lines[lay.inputRow - 1], `${rows}×${cols}`).toContain("chem>");
     }

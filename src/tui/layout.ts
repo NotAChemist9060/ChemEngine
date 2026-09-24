@@ -24,6 +24,19 @@ export const MIN_CHROME_ROWS = 14;
 /** Terminal with fewer rows than this hides the banner. */
 export const MIN_BANNER_ROWS = 6;
 
+/**
+ * Rows reserved *under* the viewport. The TUI frame is rendered one row shorter
+ * than the terminal so Ink never classifies it as fullscreen: on Windows Ink
+ * force-clears the whole terminal on every fullscreen frame (ink#969
+ * workaround), which visibly blinks the lower half while typing. At
+ * `rows - 1` Ink uses its incremental diff renderer (changed cells only).
+ * Uniform on all platforms so layout math and tests are deterministic.
+ */
+export const VIEW_PAD = 1;
+
+/** Frame height for a terminal of `rows` rows (always ≥ 1). */
+export const viewHeight = (rows: number): number => Math.max(1, rows - VIEW_PAD);
+
 /** Row heights of the chrome pieces (measured from the components). */
 export const BANNER_ROWS = 5; // double border + paddingY 1 + 1 content line
 export const INFO_ROWS = 1;

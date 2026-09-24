@@ -108,16 +108,33 @@ Acceptance: `npm test` + `tsc --noEmit` green (**135 tests, verified**) — real
 - ✅ Task 7 — version 0.2.1 (package.json + `commands.ts` VERSION) + `wrap-ansi ^10.0.2` added to `dependencies` (matches hoisted ink copy); footer HINTS += `· wheel`; all version literals in `tui-render`/`repl`/`cli` tests bumped. Footer hint is now 82 display cols, so the footer test renders at `{ columns: 120 }` (the `render` helper now forwards `renderToString` options) and asserts the 1-content-row truncate guard; `^C exit` assertion preserved. 135 green, `tsc` clean.
 - ✅ Task 8 — full gate: `npm test` 135/135 (12 files) + `npx tsc --noEmit` clean.
 - ✅ Task 9 — README console section rewritten for M2b.1 (v0.2.1 sketch, pinned layout, row scroll + autoscroll, wheel/click mouse row in the key table, guide panel, resize-safe input; runtime deps now `ink`+`react`+`wrap-ansi`; M2b.1 row added to the milestone table); plan-doc status flipped (this section + §10); `probe-render.mts` deleted; committed + pushed (`nac9060`).
-- ⏳ Task 10 — real-terminal checklist (human step, on a real TTY after the v0.2.1 commit): input visible with guide + 4+ tall outputs; input survives resizing; PgUp/PgDn + wheel scroll only the center; click positions the cursor; autoscroll follows newest; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3**. (Sprint backlog, not started: see the M2b.2 note at the end of this section.)
-- ⏳ **M2b.2 backlog (v0.2.2, deferred — analysed 2026-09-24, not started):** (1) fullscreen bottom-half blink while typing — root cause: `ink.js` clears the whole terminal on every fullscreen frame on win32; fix: render the frame one row under the viewport (`rows - 1`, uniform on all platforms) so Ink uses incremental diff rendering. (2) Click pastes litter (`[<0;12;20M`) — root cause: `use-input.js:97-99` strips the `\x1b` prefix before the keymap sees it, defeating the `startsWith("\u001b")` guard; fix: drop Ink-stripped SGR tails `/^\[<\d+;\d+;\d+[Mm]$/` in `keymap.ts` + feed the stripped form in tests. (3) Select & copy — drag-to-select with `?1002h` motion tracking, selection model + inverse highlight in the results pane, copy via OSC 52 (`clipboard.ts`, injectable) + `~/.chemengine/last-selection.txt` fallback + "copied N chars" toast; Esc cancels selection; Shift+drag documented fallback.
+- ⏳ Task 10 — real-terminal checklist (human step; now covers M2b.1 + M2b.2): input visible with guide + 4+ tall outputs; input survives resizing; PgUp/PgDn + wheel scroll only the center; click positions the cursor **and never adds characters**; **no bottom-half blink while typing at fullscreen**; autoscroll follows newest; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3**.
 
-Current totals: 135 tests green (12 files, incl. `tui-render` 13, `tui` 36, `scroll` 7, `mouse` 12); `src/` typechecks clean; nothing red.
+### M2b.2 — TUI polish sprint (v0.2.2)
+
+User-reported bugs fixed (root causes verified against Ink's source, 2026-09-24):
+
+1. **Bottom-half blink while typing (fullscreen)** — root cause: `ink.js:88-102` — on win32 any frame that fills the viewport makes Ink write `clearTerminal` + the whole frame on **every** render (`ink.js:768`), bypassing the incremental diff (`log-update.js:174` exists to prevent exactly this flicker). Fix: render the frame one row under the terminal on **all** platforms — `VIEW_PAD`/`viewHeight()` in `layout.ts`, `app.ts` drives layout + root height from them; Ink then uses its incremental renderer. Cost: one unused bottom row (invisible on the alternate screen buffer).
+2. **Click pastes litter** (`[<0;12;20M` landing in the input) — root cause: `use-input.js:97-99` strips the leading `\x1b` from unknown sequences before the `useInput` callback, so the keymap's `startsWith("\u001b")` guard never fires and the tail falls through to `insert` (`state.ts:107`). The M2b.1 guard test fed the *raw* `\u001b[<…` form, so it passed headlessly. Fix: `keymap.ts` gains `SGR_TAIL_RE = /^\[<\d+;\d+;\d+[Mm]$/`; Ink-stripped tails are dropped before the insert fallthrough. Covers press/release/wheel and protects the palette query too.
+
+Acceptance: `npm test` + `tsc --noEmit` green (**136 tests**); live check — no blink while typing at fullscreen; clicking only moves the cursor, never types.
+
+**Sprint status (2026-09-24):**
+- ✅ Task A — version 0.2.2: `package.json` (+ regenerated `package-lock.json`: root version + `wrap-ansi`), `commands.ts` VERSION, all literals in `tui-render`/`repl`/`cli`/`tui` tests + README sketch.
+- ✅ Task B — flicker fix: `VIEW_PAD`/`viewHeight` in `layout.ts`, `app.ts` layout + root height from `viewHeight(rows)`; `renderFrame` helper, pinned 24×160 regression and geometry matrix all derive from the same exports (deterministic on any OS). `tui-render` 13 green.
+- ✅ Task C — litter fix: `SGR_TAIL_RE` guard + new keymap test feeding the Ink-stripped tails (dropped; printable input still inserts). `tui.test.ts` 36 → 37.
+- ✅ Task D — gate `npm test` 136/136 + `tsc --noEmit` clean; README (v0.2.2, flicker + litter bullets, M2b.2 milestone row) + this plan doc updated; committed + pushed (`nac9060`).
+- ⏳ Select & copy (drag-select + OSC 52) — still backlogged, not started this sprint.
+
+Current totals: 136 tests green (12 files, incl. `tui-render` 13, `tui` 37, `scroll` 7, `mouse` 12); `src/` typechecks clean; nothing red.
 
 ---
 
 ## Next-session handoff (for the future agent)
 
 Environment: Windows + PowerShell (no `head`; use `Select-Object -First/-Last`). Node 24 runs TS natively (`node src/cli/index.ts …`). Commands that work: `npx vitest run <file>`, `npx tsc --noEmit`, `npm test`. Git identity `nac9060` configured; remote github.com/NotAChemist9060/ChemEngine (private). `renderToString` renders at ~80 cols — column interleaving in tests is an artifact; row positions are what matter.
+
+> Handoff below is historical (pre-commit M2b.1 planning). Tasks 7–9 are done, Task 10 is the live-terminal step; the M2b.2 block above supersedes it for current work. v0.2.2 is committed — the next code work is M3.
 
 **Task 7 — version 0.2.1 + `wrap-ansi` (do this next):**
 1. `package.json` — `"version": "0.2.0"` → `"0.2.1"`; add `wrap-ansi` to `dependencies` (hoisted ink dep; ESM default import already proven in `src/tui/scroll.ts`: `import wrapAnsi from "wrap-ansi"`). Pick a version matching what ink hoists (check `node_modules/wrap-ansi/package.json`).
@@ -213,7 +230,7 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2 — console UX: global `chem` command + local launchers, REPL with help/examples/suggestions, ANSI TTY output (66 tests green)
 - [x] M2b — console TUI: Ink banner/panels/footer, hotkeys + Tab completion, `/` palette, scrollable result history, `~/.chemengine` config persistence, TTY auto-fallback; v0.2.0 (105 tests green) — incl. adaptive fixed-pinned layout + `Ctrl+G` guide panel
 - [x] M2b.1 — TUI hotfix sprint v0.2.1 (pinned layout, row-based scroll, autoscroll, SGR mouse wheel/click, resize-safe chrome) — 135 tests green, `tsc` clean, pushed; live-terminal check = Task 10 (pending at commit time)
-- [ ] M2b.2 — select & copy + the two deferred fixes (v0.2.2) — backlog, see sprint status note above
+- [x] M2b.2 — TUI polish v0.2.2 (flicker-free frame via one-row-under-viewport rendering, keymap guard against Ink-stripped mouse tails) — 136 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10; select & copy still backlogged
 - [ ] M3 — structure + classification
 - [ ] M4 — prediction (rules + thermodynamics)
 - [ ] M5 — kinetics + CLI polish

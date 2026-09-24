@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.2.1                autonomous · offline · local   ║
+║  ChemEngine v0.2.2                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -70,7 +70,8 @@ Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack 
 - Results render as bordered cards — green for success, red for errors — and persist across the session.
 - The layout is **pinned**: the banner + engine-info strip (top) and the input + key-hint footer (bottom) are fixed-height chrome that can never be squeezed away; the middle region owns **all** scrolling. It clips its own rows and scrolls them row-by-row — `PgUp/PgDn` page by a viewport, the mouse wheel steps by 3. Scrolling to the bottom re-pins to **autoscroll**, which follows the newest output; a `▲ N rows above — scroll down` marker shows how many rows are scrolled off.
 - The input line survives any window size: on short terminals the banner/info/footer chrome collapses instead of the input getting pushed off-screen.
-- Mouse support (real terminals): the wheel scrolls only the center results window, and clicking the input line moves the cursor to the clicked position.
+- Mouse support (real terminals): the wheel scrolls only the center results window, and clicking the input line moves the cursor to the clicked position. Mouse bytes are dropped at the keymap, so clicks never type characters into the input.
+- Rendering is **flicker-free**: the frame is sized one row under the terminal height (that unused bottom row is invisible) so Ink repaints only the changed cells instead of clearing and redrawing the whole screen on every keystroke.
 - On wide terminals (≥105 cols) a **guide panel** (commands, keys, engine facts) docks on the right; `Ctrl+G` toggles it.
 - **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
 - A spinner shows while a command computes (used by the upcoming `simulate`).
@@ -194,6 +195,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M2 | Console UX: real `chem` command, interactive REPL, in-console guide | ✅ done |
 | M2b | Console TUI: Ink UI (banner, result cards, footer), hotkeys + completion, `/` palette, result history, config persistence, TTY auto-fallback | ✅ done |
 | M2b.1 | TUI hardening (v0.2.1): pinned layout, row-precise scroll + autoscroll, mouse wheel/click, resize-safe input, guide panel | ✅ done |
+| M2b.2 | TUI polish (v0.2.2): flicker-free frame (incremental rendering), keymap guard against mouse-click litter | ✅ done |
 | M3 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
 | M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
