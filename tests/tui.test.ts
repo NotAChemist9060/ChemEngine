@@ -289,7 +289,7 @@ describe("TUI layout math", () => {
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.3", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -300,12 +300,12 @@ describe("TUI guide content", () => {
     expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.2");
+    expect(engine).toContain("v0.2.3");
   });
 
   it("keeps every guide line within the narrowest panel inner width", () => {
     // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
-    const sections = guideSections({ version: "0.2.2", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.3", commands: ["balance", "element"], elementCount: 118 });
     for (const s of sections) {
       for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
     }
@@ -313,11 +313,14 @@ describe("TUI guide content", () => {
 });
 
 describe("TUI render options", () => {
-  it("uses the alternate screen buffer so full-screen frames don't hit terminal scrollback", () => {
-    // Without alternateScreen, Ink 7 clears + redraws viewport-filling frames
-    // into the normal buffer (issue #969 workaround), which on Windows brings
-    // up a right-hand scrollbar and desyncs the input line.
-    expect(TUI_RENDER_OPTIONS).toEqual({ exitOnCtrlC: false, alternateScreen: true });
+  it("uses the alternate screen buffer + incremental rendering so frames never scroll the normal buffer or blink", () => {
+    // alternateScreen: Ink 7 clears + redraws viewport-filling frames into the
+    // normal buffer (issue #969 workaround) which on Windows brings up a
+    // right-hand scrollbar and desyncs the input line.
+    // incrementalRendering: without it Ink's standard renderer erases and
+    // rewrites the ENTIRE frame on every keystroke (the blink). Both layers
+    // are pinned here so a revert of either fails loudly.
+    expect(TUI_RENDER_OPTIONS).toEqual({ exitOnCtrlC: false, alternateScreen: true, incrementalRendering: true });
   });
 });
 

@@ -108,7 +108,7 @@ Acceptance: `npm test` + `tsc --noEmit` green (**135 tests, verified**) — real
 - ✅ Task 7 — version 0.2.1 (package.json + `commands.ts` VERSION) + `wrap-ansi ^10.0.2` added to `dependencies` (matches hoisted ink copy); footer HINTS += `· wheel`; all version literals in `tui-render`/`repl`/`cli` tests bumped. Footer hint is now 82 display cols, so the footer test renders at `{ columns: 120 }` (the `render` helper now forwards `renderToString` options) and asserts the 1-content-row truncate guard; `^C exit` assertion preserved. 135 green, `tsc` clean.
 - ✅ Task 8 — full gate: `npm test` 135/135 (12 files) + `npx tsc --noEmit` clean.
 - ✅ Task 9 — README console section rewritten for M2b.1 (v0.2.1 sketch, pinned layout, row scroll + autoscroll, wheel/click mouse row in the key table, guide panel, resize-safe input; runtime deps now `ink`+`react`+`wrap-ansi`; M2b.1 row added to the milestone table); plan-doc status flipped (this section + §10); `probe-render.mts` deleted; committed + pushed (`nac9060`).
-- ⏳ Task 10 — real-terminal checklist (human step; now covers M2b.1 + M2b.2): input visible with guide + 4+ tall outputs; input survives resizing; PgUp/PgDn + wheel scroll only the center; click positions the cursor **and never adds characters**; **no bottom-half blink while typing at fullscreen**; autoscroll follows newest; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3**.
+- ⏳ Task 10 — real-terminal checklist (human step; now covers M2b.1–M2b.3): input visible with guide + 4+ tall outputs; input survives resizing; PgUp/PgDn + wheel scroll only the center; click positions the cursor **and never adds characters**; **no bottom-half blink while typing at fullscreen** (M2b.3: specifically with the guide open, long continuous typing); autoscroll follows newest; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3**.
 
 ### M2b.2 — TUI polish sprint (v0.2.2)
 
@@ -127,6 +127,25 @@ Acceptance: `npm test` + `tsc --noEmit` green (**136 tests**); live check — no
 - ⏳ Select & copy (drag-select + OSC 52) — still backlogged, not started this sprint.
 
 Current totals: 136 tests green (12 files, incl. `tui-render` 13, `tui` 37, `scroll` 7, `mouse` 12); `src/` typechecks clean; nothing red.
+
+### M2b.3 — anti-blink sprint (v0.2.3)
+
+The v0.2.2 "flicker-free" fix was incomplete: it only kept the frame one row under the viewport so Ink never took the win32 fullscreen force-clear path (`ink.js:88-102`, `ink.js:768`). Ink's **incremental renderer was never active** — `render.js` defaults `incrementalRendering: false`, so Ink's standard renderer (`log-update.js` `createStandard`) **erases and rewrites the entire frame on every keystroke**. Live diagnosis (user, 2026-09-24): the blink persisted **with the guide open** and vanished with it hidden — a wide frame makes the full erase+redraw far more visible.
+
+Root cause verified empirically (temp `probe-writes.mts` on fake TTY streams, deleted before commit): per-keystroke stdout bytes at 24×160 —
+
+| guide | incrementalRendering | bytes/keystroke | full-line erases (`\x1b[2K`) |
+|---|---|---|---|
+| on | off (Ink default) | ~3665 | 24 |
+| off | off (Ink default) | ~1646 | 24 |
+| on | **on** | ~105 | 0 |
+| off | **on** | ~105 | 0 |
+
+Fix: `src/tui/index.ts` — `TUI_RENDER_OPTIONS` += `incrementalRendering: true` (explicit, since Ink's default is false) with a comment tying it to `log-update.js` `createStandard` vs `createIncremental`. The one-row-under viewport stays: incremental → only changed lines written; rows−1 → never fullscreen → no win32 `clearTerminal` per frame. Both layers are required.
+
+Regression: `tests/ink-writes.test.ts` mounts the real `App` on fake TTY streams (`FakeTtyStdin` swallows `data` registrations so Ink's `readable`-based input path works; `ref`/`unref`/`setRawMode` stubs; `os.homedir` redirected to a throwaway dir) and asserts per-keystroke writes stay < 400 B with no full-frame erase. (Harness lessons: base `Readable` has no `ref`/`unref`, and a missing stub silently kills Ink's input effects at mount.)
+
+Acceptance: `npm test` + `tsc --noEmit` green (**138 tests**); Task 10 live check — continuous typing with the guide open must be rock-solid.
 
 ---
 
@@ -230,7 +249,8 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2 — console UX: global `chem` command + local launchers, REPL with help/examples/suggestions, ANSI TTY output (66 tests green)
 - [x] M2b — console TUI: Ink banner/panels/footer, hotkeys + Tab completion, `/` palette, scrollable result history, `~/.chemengine` config persistence, TTY auto-fallback; v0.2.0 (105 tests green) — incl. adaptive fixed-pinned layout + `Ctrl+G` guide panel
 - [x] M2b.1 — TUI hotfix sprint v0.2.1 (pinned layout, row-based scroll, autoscroll, SGR mouse wheel/click, resize-safe chrome) — 135 tests green, `tsc` clean, pushed; live-terminal check = Task 10 (pending at commit time)
-- [x] M2b.2 — TUI polish v0.2.2 (flicker-free frame via one-row-under-viewport rendering, keymap guard against Ink-stripped mouse tails) — 136 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10; select & copy still backlogged
+- [x] M2b.2 — TUI polish v0.2.2 (one-row-under-viewport frame, keymap guard against Ink-stripped mouse tails) — 136 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10; select & copy still backlogged
+- [x] M2b.3 — anti-blink v0.2.3 (enable Ink incremental rendering: per-keystroke writes drop to just the input row, no full-frame erase+redraw) — 138 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10
 - [ ] M3 — structure + classification
 - [ ] M4 — prediction (rules + thermodynamics)
 - [ ] M5 — kinetics + CLI polish
