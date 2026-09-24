@@ -55,6 +55,10 @@ export function keyToAction(input: string, key: PressedKey): KeyAction | null {
   if (key.end) return "end";
   if (key.leftArrow) return "left";
   if (key.rightArrow) return "right";
+  // Ignore raw escape sequences (SGR mouse reports and other unknown CSI) — they
+  // are not keystrokes and must never be inserted into the input line. A lone
+  // ESC (length 1) still reaches the key.escape branch above.
+  if (input.length > 1 && input.startsWith("\u001b")) return null;
   if (key.ctrl && input.toLowerCase() === "c") return "exit";
   if (key.ctrl && input.toLowerCase() === "l") return "clear-results";
   if (key.ctrl && input.toLowerCase() === "g") return "toggle-guide";

@@ -7,16 +7,71 @@ import { Guide, guideSections } from "../src/tui/guide.ts";
 import { InputBar } from "../src/tui/inputbar.ts";
 import { Palette } from "../src/tui/palette.ts";
 import { ResultPane } from "../src/tui/resultpane.ts";
+import { layout, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "../src/tui/layout.ts";
+import { box } from "../src/tui/el.ts";
+import type { ResultEntry } from "../src/tui/state.ts";
 
 /** Headless render of a TUI component — Ink supports string rendering (no TTY needed). */
-function render(node: Parameters<typeof renderToString>[0]): string {
-  return renderToString(node);
+function render(node: Parameters<typeof renderToString>[0], options?: Parameters<typeof renderToString>[1]): string {
+  return renderToString(node, options);
+}
+
+/**
+ * Three short cards at width 40 → heights [8, 8, 7] (23 rows total), so a
+ * 6-row viewport can never hold all three and every `visibleRange` window is
+ * deterministic.
+ */
+const THREE_SHORT = [
+  { id: 1, command: "one", output: "alpha", ok: true },
+  { id: 2, command: "two", output: "beta", ok: true },
+  { id: 3, command: "three", output: "gamma", ok: true },
+] satisfies readonly ResultEntry[];
+
+/**
+ * Full pinned app frame — mirrors app.ts chrome (explicit heights +
+ * flexShrink: 0 + overflowY: hidden) so tests pin real layout rows.
+ * Rendered statically the columns interleave at ~80 cols; row positions are
+ * what the assertions rely on.
+ */
+function renderFrame(rows: number, cols: number, guideOn: boolean, results: readonly ResultEntry[]): string {
+  const lay = layout(rows, cols, guideOn);
+  const cardWidth = cols - lay.guideWidth - 2;
+  const frame = box(
+    { flexDirection: "column", height: rows },
+    lay.showBanner
+      ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: "0.2.1" }))
+      : null,
+    lay.showInfo
+      ? box({ height: INFO_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(EngineInfo, { elementCount: 118 }))
+      : null,
+    lay.viewportRows > 0
+      ? box(
+          { height: lay.viewportRows, flexShrink: 0, flexDirection: "column", overflowY: "hidden" },
+          box(
+            { flexDirection: "row", flexGrow: 1 },
+            box(
+              { flexGrow: 1, flexDirection: "column", overflowY: "hidden" },
+              createElement(ResultPane, { results, scrollTop: null, viewportRows: lay.viewportRows, width: cardWidth }),
+            ),
+            lay.showGuide
+              ? createElement(Guide, {
+                  sections: guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 }),
+                  width: lay.guideWidth,
+                })
+              : null,
+          ),
+        )
+      : null,
+    box({ height: INPUT_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(InputBar, { value: "H2 + O2", cursor: 2 })),
+    lay.showInfo ? box({ height: FOOTER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Footer, {})) : null,
+  );
+  return render(frame);
 }
 
 describe("TUI presentation layer", () => {
   it("renders the banner with the version", () => {
-    const out = render(createElement(Banner, { version: "0.2.0" }));
-    expect(out).toContain("ChemEngine v0.2.0");
+    const out = render(createElement(Banner, { version: "0.2.1" }));
+    expect(out).toContain("ChemEngine v0.2.1");
     expect(out).toContain("autonomous · offline · local");
     expect(out).toContain("╔"); // double border
   });
@@ -28,7 +83,7 @@ describe("TUI presentation layer", () => {
   });
 
   it("renders the guide panel with sections", () => {
-    const sections = guideSections({ version: "0.2.0", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
     const out = render(createElement(Guide, { sections, width: 40 }));
     expect(out).toContain("GUIDE");
     expect(out).toContain("Commands");
@@ -38,9 +93,13 @@ describe("TUI presentation layer", () => {
   });
 
   it("renders the footer key hints", () => {
-    const out = render(createElement(Footer, {}));
+    // Full hint is 82 display cols — render at a realistic TTY width instead of
+    // ink's 80-col default so `^C exit` isn't truncated by the wrap: truncate guard.
+    const out = render(createElement(Footer, {}), { columns: 120 });
     expect(out).toContain("Tab ·");
+    expect(out).toContain("PgUp/Dn · wheel"); // M2b.1: wheel hint added
     expect(out).toContain("^C exit");
+    expect(out.split("\n")).toHaveLength(3); // stays 1 content row (truncate, no wrap)
   });
 
   it("renders the input bar with the cursor glyph", () => {
@@ -55,8 +114,9 @@ describe("TUI presentation layer", () => {
           { id: 1, command: "balance CH4 + O2 -> CO2 + H2O", output: "CH4 + 2O2 -> CO2 + 2H2O", ok: true },
           { id: 2, command: "balnce", output: "unknown command 'balnce'", ok: false },
         ],
-        limit: 8,
-        scrollOffset: 0,
+        scrollTop: 0,
+        viewportRows: 16,
+        width: 40,
       }),
     );
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");
@@ -66,8 +126,69 @@ describe("TUI presentation layer", () => {
   });
 
   it("renders the empty state", () => {
-    const out = render(createElement(ResultPane, { results: [], limit: 8, scrollOffset: 0 }));
+    const out = render(createElement(ResultPane, { results: [], scrollTop: null, viewportRows: 10, width: 40 }));
     expect(out).toContain("No results yet");
+  });
+
+  it("slices to only the card visible at the top of the scroll range", () => {
+    const out = render(createElement(ResultPane, { results: THREE_SHORT, scrollTop: 0, viewportRows: 6, width: 40 }));
+    expect(out).toContain("alpha");
+    expect(out).not.toContain("beta");
+    expect(out).not.toContain("gamma");
+    expect(out).not.toContain("rows above"); // at the top → no scrolled-off marker
+  });
+
+  it("autoscrolls to the newest card when scrollTop is null", () => {
+    const out = render(createElement(ResultPane, { results: THREE_SHORT, scrollTop: null, viewportRows: 6, width: 40 }));
+    expect(out).toContain("gamma"); // newest card is rendered
+    expect(out).toContain("rows above"); // older rows are scrolled off
+    expect(out).not.toContain("alpha");
+    expect(out).not.toContain("beta");
+  });
+
+  it("shows the scrolled-off marker with an exact row count", () => {
+    const out = render(createElement(ResultPane, { results: THREE_SHORT, scrollTop: 5, viewportRows: 6, width: 40 }));
+    expect(out).toContain("▲ 5 rows above — scroll down");
+    expect(out).toContain("alpha");
+    expect(out).toContain("beta");
+    expect(out).not.toContain("gamma");
+  });
+
+  it("pins the full 24×160 frame with guide and 4 tall results", () => {
+    const tall = Array.from({ length: 4 }, (_, i) => ({
+      id: i + 1,
+      command: `tail${i + 1}`,
+      output: "lorem ipsum dolor ".repeat(15),
+      ok: true,
+    }));
+    const out = renderFrame(24, 160, true, tall);
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(24); // chrome pinned, center clipped to 14 rows
+    expect(lines[20]).toContain("chem>"); // input sits on line 20 (0-based)
+    expect(lines[21]).toContain("┌"); // footer top border
+    expect(lines[23]).toContain("└"); // footer bottom border
+    expect(out).toMatch(/▲ \d+ rows above/); // scrolled-off rows are announced
+    expect(out).toContain("╭"); // at least one result card is rendered (round border)
+  });
+
+  it("keeps the input line on-screen across terminal geometries", () => {
+    const geometries = [
+      [5, 40],
+      [8, 80],
+      [12, 80],
+      [14, 80],
+      [24, 160],
+      [40, 200],
+      [60, 200],
+    ] as const;
+    for (const [rows, cols] of geometries) {
+      const lay = layout(rows, cols, true);
+      const out = renderFrame(rows, cols, true, THREE_SHORT);
+      const lines = out.split("\n");
+      expect(lines, `${rows}×${cols}`).toHaveLength(rows); // chrome can never exceed rows
+      // Input is pinned to the bottom-most chrome row — never pushed off-screen.
+      expect(lines[lay.inputRow - 1], `${rows}×${cols}`).toContain("chem>");
+    }
   });
 
   it("renders the command palette with the active row highlighted", () => {
@@ -84,19 +205,5 @@ describe("TUI presentation layer", () => {
     expect(out).toContain("/bal");
     expect(out).toContain("> balance  Balance a chemical equation");
     expect(out).toContain("element  Query periodic table data");
-  });
-
-  it("renders the scrolled marker when results are older", () => {
-    const out = render(
-      createElement(ResultPane, {
-        results: [
-          { id: 1, command: "a", output: "b", ok: true },
-          { id: 2, command: "c", output: "d", ok: true },
-        ],
-        limit: 1,
-        scrollOffset: 1,
-      }),
-    );
-    expect(out).toContain("1 older result");
   });
 });

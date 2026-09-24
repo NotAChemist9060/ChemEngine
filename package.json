@@ -1,6 +1,6 @@
 {
   "name": "chemengine",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Autonomous offline chemical simulation engine: classify species, predict reactions, rank by ΔG, simulate kinetics.",
   "type": "module",
   "private": true,
@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "ink": "^7.1.1",
-    "react": "^19.3.0"
+    "react": "^19.3.0",
+    "wrap-ansi": "^10.0.2"
   }
 }

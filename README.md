@@ -17,7 +17,7 @@ ChemEngine takes chemistry *inputs* — formulas, equations, species — and doe
 npm install
 ```
 
-Runtime dependencies for the terminal UI: `ink` + `react` (presentation only — the chemistry engine itself stays dependency-free).
+Runtime dependencies for the terminal UI: `ink` + `react` + `wrap-ansi` (presentation only — the chemistry engine itself stays dependency-free).
 
 ### The `chem` command
 
@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.2.0                autonomous · offline · local   ║
+║  ChemEngine v0.2.1                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -46,30 +46,34 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
  ╰──────────────────────────────────────────────────────────────────╯
  chem> balance CH4 + O2 -> CO2 + H2O
  ┌──────────────────────────────────────────────────────────────────┐
- │ ↵ run · Tab complete · / palette · ↑↓ history · PgUp/PgDn results│
- │  · ^L clear · ^C exit                                            │
+ │ ↵ run · / palette · Tab · ↑↓ hist · PgUp/Dn · wheel · ^L clear… │
  └──────────────────────────────────────────────────────────────────┘
 ```
 
 Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack as OpenCode):
 
-| Key | Action |
+| Key / input | Action |
 |---|---|
 | `Enter` | run the current input |
 | `Tab` / `Shift+Tab` | cycle completion (commands → element symbols) |
 | `↑ / ↓` | recall previous/next command |
-| `PgUp / PgDn` | scroll result history |
+| `PgUp / PgDn` | scroll result history (row-precise) |
+| mouse wheel | scroll only the results window |
+| mouse click | place the input cursor (on the input line) |
 | `/` | open the command palette (fuzzy filter, `Enter` picks) |
 | `Ctrl+L` | clear result history |
-| `Ctrl+G` | show/hide the guide panel |
+| `Ctrl+G` | show/hide the guide panel (persisted in config) |
 | `Esc` | clear input / close palette |
 | `Ctrl+C` | exit (again when the input is non-empty) |
 
 - Type commands **raw** — no quotes, no shell escaping (`+`, `->`, `<=>` are safe here).
-- Results render as bordered cards — green for success, red for errors — and persist across the session (scrollable).
+- Results render as bordered cards — green for success, red for errors — and persist across the session.
+- The layout is **pinned**: the banner + engine-info strip (top) and the input + key-hint footer (bottom) are fixed-height chrome that can never be squeezed away; the middle region owns **all** scrolling. It clips its own rows and scrolls them row-by-row — `PgUp/PgDn` page by a viewport, the mouse wheel steps by 3. Scrolling to the bottom re-pins to **autoscroll**, which follows the newest output; a `▲ N rows above — scroll down` marker shows how many rows are scrolled off.
+- The input line survives any window size: on short terminals the banner/info/footer chrome collapses instead of the input getting pushed off-screen.
+- Mouse support (real terminals): the wheel scrolls only the center results window, and clicking the input line moves the cursor to the clicked position.
+- On wide terminals (≥105 cols) a **guide panel** (commands, keys, engine facts) docks on the right; `Ctrl+G` toggles it.
 - **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
 - A spinner shows while a command computes (used by the upcoming `simulate`).
-- The console adapts to your terminal: on wide screens a **guide panel** (commands, keys, engine facts) docks on the right; on short terminals the banner/info/footer chrome collapses to keep the input line and results on screen.
 - The TUI runs in the terminal's **alternate screen buffer** (like `vim`/`htop`/`less`): no scrollback noise while it's running, and your previous shell content is restored when you exit.
 
 ### Configuration & history
@@ -189,6 +193,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M1 | Core math: rationals, units (mol/L/s), formula/equation parsers, equation balancer | ✅ done |
 | M2 | Console UX: real `chem` command, interactive REPL, in-console guide | ✅ done |
 | M2b | Console TUI: Ink UI (banner, result cards, footer), hotkeys + completion, `/` palette, result history, config persistence, TTY auto-fallback | ✅ done |
+| M2b.1 | TUI hardening (v0.2.1): pinned layout, row-precise scroll + autoscroll, mouse wheel/click, resize-safe input, guide panel | ✅ done |
 | M3 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
 | M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |

@@ -43,6 +43,13 @@ describe("TUI keymap", () => {
     expect(keyToAction("b", {})).toBe("insert");
     expect(keyToAction("", {})).toBeNull();
   });
+
+  it("drops raw escape sequences (SGR mouse reports) but keeps lone ESC as cancel", () => {
+    expect(keyToAction("\u001b[<0;1;1M", {})).toBeNull();
+    expect(keyToAction("\u001b[<65;5;8M", {})).toBeNull();
+    expect(keyToAction("", { escape: true })).toBe("cancel");
+    expect(keyToAction("\u001b[<0;3;7m", {})).toBeNull();
+  });
 });
 
 describe("TUI reducer", () => {
@@ -100,21 +107,57 @@ describe("TUI reducer", () => {
     expect(s.input).toBe("element");
   });
 
-  it("scrolling clamps to the scroll page", () => {
-    const s0 = initialState(DEFAULT_CONFIG, []);
-    let s = s0;
-    for (let i = 0; i < 12; i++) {
-      s = reducer(s, { type: "submit", command: `cmd${i}`, output: `out${i}`, ok: true });
-    }
-    // 12 results, page 8 → 4 extra available above the window.
-    s = reducer(s, { type: "scroll-up", page: 8 });
-    expect(s.scrollOffset).toBe(1);
-    for (let i = 0; i < 10; i++) s = reducer(s, { type: "scroll-up", page: 8 });
-    expect(s.scrollOffset).toBe(4);
-    s = reducer(s, { type: "scroll-up", page: 8 });
-    expect(s.scrollOffset).toBe(4); // clamped
-    s = reducer(s, { type: "scroll-down" });
-    expect(s.scrollOffset).toBe(3);
+  it("starts pinned to the newest output (autoscroll) and scrolls by rows within [0, max]", () => {
+    let s = initialState();
+    expect(s.scrollTop).toBeNull();
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12); // page up from the bottom
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(4);
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(0); // clamped at the oldest row
+    s = reducer(s, { type: "scroll-down", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(8);
+    s = reducer(s, { type: "wheel-up", max: 20, step: 3 });
+    expect(s.scrollTop).toBe(5);
+    s = reducer(s, { type: "wheel-down", max: 20, step: 3 });
+    expect(s.scrollTop).toBe(8);
+  });
+
+  it("re-pins to autoscroll (null) when scrolling reaches the bottom", () => {
+    let s = initialState();
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(4);
+    s = reducer(s, { type: "scroll-down", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+    s = reducer(s, { type: "scroll-down", max: 20, page: 8 });
+    expect(s.scrollTop).toBeNull(); // 20 == max → pinned to newest again
+  });
+
+  it("resets to autoscroll on submit and clear-results", () => {
+    let s = initialState();
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+    s = reducer(s, { type: "submit", command: "balance H2 + O2 -> H2O", output: "2H2 + O2 -> 2H2O", ok: true });
+    expect(s.scrollTop).toBeNull();
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+    s = reducer(s, { type: "clear-results" });
+    expect(s.scrollTop).toBeNull();
+    expect(s.results).toHaveLength(0);
+  });
+
+  it("clamps the click-positioned cursor to the input length", () => {
+    let s = initialState();
+    s = reducer(s, { type: "insert", text: "balance" });
+    s = reducer(s, { type: "set-cursor", index: 1 });
+    expect(s.cursor).toBe(1);
+    s = reducer(s, { type: "set-cursor", index: 99 });
+    expect(s.cursor).toBe(7); // clamped to input length
+    s = reducer(s, { type: "set-cursor", index: -3 });
+    expect(s.cursor).toBe(0);
   });
 
   it("opens, edits, and applies the palette", () => {
@@ -181,47 +224,59 @@ describe("TUI palette list", () => {
 });
 
 describe("TUI layout math", () => {
-  it("shows all chrome on a large terminal", () => {
-    const l = layout(40, 160, true, 8);
+  it("shows all chrome on a large terminal with an exact center viewport", () => {
+    const l = layout(40, 160, true);
     expect(l.showBanner).toBe(true);
     expect(l.showInfo).toBe(true);
     expect(l.showGuide).toBe(true);
     expect(l.guideWidth).toBeGreaterThanOrEqual(30);
-    expect(l.pageSize).toBeGreaterThanOrEqual(4);
+    expect(l.viewportRows).toBe(40 - 5 - 1 - 1 - 3); // 30
+    expect(l.inputRow).toBe(37); // bottom row minus the 3 footer rows
+  });
+
+  it("caps the guide width at 48 columns", () => {
+    expect(layout(60, 200, true).guideWidth).toBe(48);
   });
 
   it("hides the guide on narrow terminals", () => {
-    const l = layout(40, MIN_GUIDE_COLUMNS - 1, true, 8);
+    const l = layout(60, MIN_GUIDE_COLUMNS - 1, true);
     expect(l.showGuide).toBe(false);
     expect(l.guideWidth).toBe(0);
   });
 
+  it("hides the guide on short terminals even when wide", () => {
+    expect(layout(11, 200, true).showGuide).toBe(false);
+    expect(layout(12, 200, true).showGuide).toBe(true);
+  });
+
   it("hides the guide when toggled off", () => {
-    const l = layout(40, 200, false, 8);
+    const l = layout(40, 200, false);
     expect(l.showGuide).toBe(false);
   });
 
-  it("hides the info strip + footer on short terminals but keeps a scroll page", () => {
-    const l = layout(MIN_CHROME_ROWS - 1, 200, true, 8);
+  it("hides the info strip + footer on short terminals but keeps the input pinned", () => {
+    const l = layout(MIN_CHROME_ROWS - 1, 200, true); // 13 rows
     expect(l.showBanner).toBe(true);
     expect(l.showInfo).toBe(false);
-    expect(l.pageSize).toBeGreaterThanOrEqual(1);
+    expect(l.viewportRows).toBe(13 - 5 - 1); // 7
+    expect(l.inputRow).toBe(13); // footer hidden → input on the bottom row
   });
 
-  it("keeps a minimum page size even on tiny terminals", () => {
-    const l = layout(5, 40, true, 8);
-    expect(l.pageSize).toBe(1);
-  });
-
-  it("caps the page size at the configured result limit", () => {
-    const l = layout(60, 200, true, 3);
-    expect(l.pageSize).toBeLessThanOrEqual(3);
+  it("collapses the center viewport rather than overflow the input on tiny windows", () => {
+    // The input line must survive window resizes: chrome rows are pinned, so the
+    // center viewport may shrink to 0 instead of pushing the input off-screen.
+    expect(layout(6, 40, true).viewportRows).toBe(0); // banner 5 + input 1 = rows
+    expect(layout(6, 40, true).inputRow).toBe(6);
+    expect(layout(5, 40, true).viewportRows).toBe(4); // banner hidden
+    expect(layout(5, 40, true).inputRow).toBe(5);
+    expect(layout(1, 40, true).viewportRows).toBe(0);
+    expect(layout(1, 40, true).inputRow).toBe(1);
   });
 });
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.0", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -229,9 +284,18 @@ describe("TUI guide content", () => {
     expect(commands).toContain("element");
     const keys = sections[1]!.lines.join("\n");
     expect(keys).toContain("^G show/hide this guide");
+    expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.0");
+    expect(engine).toContain("v0.2.1");
+  });
+
+  it("keeps every guide line within the narrowest panel inner width", () => {
+    // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
+    const sections = guideSections({ version: "0.2.1", commands: ["balance", "element"], elementCount: 118 });
+    for (const s of sections) {
+      for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
+    }
   });
 });
 

@@ -1,7 +1,9 @@
 /**
  * Pure layout math for the fixed full-screen console.
- * Decides, for a given terminal size, which chrome fits and how many result
- * cards the middle area shows at once (the scroll page).
+ * Decides, for a given terminal size, which chrome fits and how many rows the
+ * center (input/output) region gets. The center viewport is an *exact* height:
+ * chrome pieces (banner, info, input, footer) are pinned with explicit heights
+ * and `flexShrink: 0` so they can never be squeezed away by tall content.
  */
 export interface Layout {
   showBanner: boolean;
@@ -9,8 +11,10 @@ export interface Layout {
   showGuide: boolean;
   /** Guide panel width in columns (0 when hidden). */
   guideWidth: number;
-  /** How many result cards are visible in the middle scroller at once. */
-  pageSize: number;
+  /** Exact rows available for the center results viewport. */
+  viewportRows: number;
+  /** 1-based terminal row of the input line (for mouse click mapping). */
+  inputRow: number;
 }
 
 /** Terminal narrower than this hides the guide panel. */
@@ -21,19 +25,12 @@ export const MIN_CHROME_ROWS = 14;
 export const MIN_BANNER_ROWS = 6;
 
 /** Row heights of the chrome pieces (measured from the components). */
-const BANNER_ROWS = 5; // double border + paddingY 1 + 1 content line
-const INFO_ROWS = 1;
-const FOOTER_ROWS = 3; // single border box + 1 content line
-const INPUT_ROWS = 1;
-/** Extra breathing room (padding/spacing between chrome pieces). */
-function gapRows(rows: number): number {
-  return rows >= 12 ? 2 : 1;
-}
+export const BANNER_ROWS = 5; // double border + paddingY 1 + 1 content line
+export const INFO_ROWS = 1;
+export const FOOTER_ROWS = 3; // single border box + 1 content line
+export const INPUT_ROWS = 1;
 
-/** Approximate rows occupied by one result card. */
-const ROWS_PER_CARD = 4;
-
-export function layout(rows: number, cols: number, guideOn: boolean, resultLimit: number): Layout {
+export function layout(rows: number, cols: number, guideOn: boolean): Layout {
   const showBanner = rows >= MIN_BANNER_ROWS;
   const showInfo = rows >= MIN_CHROME_ROWS;
   const showGuide = guideOn && cols >= MIN_GUIDE_COLUMNS && rows >= 12;
@@ -42,8 +39,11 @@ export function layout(rows: number, cols: number, guideOn: boolean, resultLimit
   const bannerRows = showBanner ? BANNER_ROWS : 0;
   const infoRows = showInfo ? INFO_ROWS : 0;
   const footerRows = showInfo ? FOOTER_ROWS : 0;
-  const available = Math.max(1, rows - bannerRows - infoRows - footerRows - INPUT_ROWS - gapRows(rows));
-  const pageSize = Math.max(1, Math.min(resultLimit, Math.floor(available / ROWS_PER_CARD) + 1));
+  // The center viewport may collapse to 0 rows on tiny windows — it must never
+  // be forced to ≥1, because that could make chrome + viewport exceed `rows`
+  // and push the input line off-screen (visible when the user resizes smaller).
+  const viewportRows = Math.max(0, rows - bannerRows - infoRows - footerRows - INPUT_ROWS);
+  const inputRow = rows - footerRows;
 
-  return { showBanner, showInfo, showGuide, guideWidth, pageSize };
+  return { showBanner, showInfo, showGuide, guideWidth, viewportRows, inputRow };
 }

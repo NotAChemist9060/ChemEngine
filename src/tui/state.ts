@@ -31,8 +31,12 @@ export interface TuiState {
   historyIndex: number;
   /** Executed outputs (oldest → newest). */
   results: ResultEntry[];
-  /** 0 = showing the latest results; >0 = scrolled up. */
-  scrollOffset: number;
+  /**
+   * Row offset from the top of the result stack: 0 = oldest at the top.
+   * null = pinned to the newest output — the autoscroll position, restored
+   * whenever a command is submitted (further results push the view to bottom).
+   */
+  scrollTop: number | null;
   paletteOpen: boolean;
   paletteQuery: string;
   paletteIndex: number;
@@ -49,7 +53,7 @@ export function initialState(config: TuiConfig = DEFAULT_CONFIG, seedHistory: st
     inputHistory: seedHistory.slice(-HISTORY_LIMIT),
     historyIndex: -1,
     results: [],
-    scrollOffset: 0,
+    scrollTop: null,
     paletteOpen: false,
     paletteQuery: "",
     paletteIndex: 0,
@@ -72,8 +76,11 @@ export type TuiAction =
   | { type: "submit"; command: string; output: string; ok: boolean }
   | { type: "clear-input" }
   | { type: "clear-results" }
-  | { type: "scroll-up"; page: number }
-  | { type: "scroll-down" }
+  | { type: "scroll-up"; max: number; page: number }
+  | { type: "scroll-down"; max: number; page: number }
+  | { type: "wheel-up"; max: number; step: number }
+  | { type: "wheel-down"; max: number; step: number }
+  | { type: "set-cursor"; index: number }
   | { type: "toggle-guide" }
   | { type: "palette-toggle" }
   | { type: "palette-close" }
@@ -83,6 +90,17 @@ export type TuiAction =
   | { type: "palette-backspace" }
   | { type: "palette-select-into-input"; command: string }
   | { type: "complete"; candidates: string[]; cycle: number };
+
+/**
+ * Move the scroll offset by `delta` content rows within [0, max].
+ * Reaching the bottom (== max) re-pins to autoscroll (scrollTop = null).
+ */
+function scrollBy(state: TuiState, delta: number, max: number): TuiState {
+  const bottom = Math.max(0, max);
+  const from = state.scrollTop === null ? bottom : state.scrollTop;
+  const next = Math.min(Math.max(0, from + delta), bottom);
+  return { ...state, scrollTop: next >= bottom ? null : next };
+}
 
 export function reducer(state: TuiState, action: TuiAction): TuiState {
   switch (action.type) {
@@ -132,7 +150,7 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
           ...state.results,
           { id: state.nextResultId, command: action.command, output: action.output, ok: action.ok },
         ],
-        scrollOffset: 0,
+        scrollTop: null,
         nextResultId: state.nextResultId + 1,
         input: "",
         cursor: 0,
@@ -140,14 +158,17 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
     case "clear-input":
       return { ...state, input: "", cursor: 0 };
     case "clear-results":
-      return { ...state, results: [], scrollOffset: 0 };
-    case "scroll-up": {
-      const page = Math.max(1, action.page);
-      const maxOffset = Math.max(0, state.results.length - page);
-      return state.scrollOffset < maxOffset ? { ...state, scrollOffset: state.scrollOffset + 1 } : state;
-    }
+      return { ...state, results: [], scrollTop: null };
+    case "scroll-up":
+      return scrollBy(state, -Math.max(1, action.page), action.max);
     case "scroll-down":
-      return state.scrollOffset > 0 ? { ...state, scrollOffset: state.scrollOffset - 1 } : state;
+      return scrollBy(state, +Math.max(1, action.page), action.max);
+    case "wheel-up":
+      return scrollBy(state, -Math.max(1, action.step), action.max);
+    case "wheel-down":
+      return scrollBy(state, +Math.max(1, action.step), action.max);
+    case "set-cursor":
+      return { ...state, cursor: Math.min(Math.max(0, action.index), state.input.length) };
     case "toggle-guide":
       return { ...state, guideOn: !state.guideOn };
     case "palette-toggle":

@@ -14,14 +14,18 @@ export interface GuideContentArgs {
   elementCount: number;
 }
 
-/** Curated guide content — pure and testable. */
+/** Curated guide content — pure and testable. Lines are ≤ 26 content cols:
+ * the guide's inner width is guideWidth − 2 (border) − 2 (paddingX), and the
+ * minimum guideWidth is 30 → 26 columns. Anything longer would wrap and grow
+ * the panel, so lines are deliberately terse. */
 export function guideSections({ version, commands, elementCount }: GuideContentArgs): GuideSection[] {
   return [
     {
       title: "Commands",
       lines: [
-        ...commands.map((c) => `${c} — type 'help' for detail`),
-        "classify · predict · simulate — coming in M3–M5",
+        ...commands,
+        "? — 'help' for detail",
+        "classify/predict — M3+",
       ],
     },
     {
@@ -29,9 +33,10 @@ export function guideSections({ version, commands, elementCount }: GuideContentA
       lines: [
         "↵ run input",
         "/ command palette",
-        "Tab complete (commands → elements)",
+        "Tab complete commands",
         "↑ ↓ command history",
-        "PgUp / PgDn scroll results",
+        "PgUp/Dn · wheel scroll",
+        "click input → caret",
         "^L clear results",
         "^G show/hide this guide",
         "^C exit",
@@ -62,5 +67,19 @@ export function Guide({ sections, width }: GuideProps) {
       children.push(createElement(Text, { dimColor: true }, line));
     }
   }
-  return box({ flexDirection: "column", width, borderStyle: "single", borderColor: "cyan", paddingX: 1, paddingY: 1 }, ...children);
+  // overflowY hidden + flexShrink 1: the guide's natural height can never
+  // grow the shared row, so tall content can't push the input line around.
+  return box(
+    {
+      flexDirection: "column",
+      width,
+      borderStyle: "single",
+      borderColor: "cyan",
+      paddingX: 1,
+      paddingY: 1,
+      overflowY: "hidden",
+      flexShrink: 1,
+    },
+    ...children,
+  );
 }

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { Text } from "ink";
 import { box } from "./el.ts";
 
-const HINTS = "↵ run · / palette · Tab · ↑↓ hist · PgUp/Dn · ^L clear · ^G guide · ^C exit";
+const HINTS = "↵ run · / palette · Tab · ↑↓ hist · PgUp/Dn · wheel · ^L clear · ^G guide · ^C exit";
 
 export function Footer() {
   return box(
