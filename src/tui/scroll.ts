@@ -13,8 +13,12 @@ import type { ResultEntry } from "./state.ts";
 /** Rows a single wheel notch scrolls. */
 export const WHEEL_STEP = 3;
 
-/** Card chrome rows beyond the body: 2 borders + 2 paddingY + 1 header line. */
-const CARD_CHROME_ROWS = 2 + 2 + 1;
+/**
+ * Card chrome rows beyond the wrapped header/body: 2 borders + 2 paddingY.
+ * (The header line is counted separately via `wrappedLines(header)`; counting
+ * it here too would overcount every card by one row.)
+ */
+const CARD_CHROME_ROWS = 2 + 2;
 
 /** Number of rows `text` occupies once wrapped at `width` (Ink's default wrap). */
 export function wrappedLines(text: string, width: number): number {
@@ -84,4 +88,119 @@ export function visibleRange(top: number, heights: readonly number[], viewportRo
 /** PgUp/PgDn page size: one viewport, minus a row so pages don't overlap edges. */
 export function pageStep(viewportRows: number): number {
   return Math.max(1, viewportRows - 1);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Screen-line model                                                         */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * One rendered row of the results region, in *viewport-local* coordinates
+ * (row 0 = the top of the center region, regardless of banner/info chrome).
+ * `text` is the raw row content with no ANSI codes — the single source of
+ * truth for both selection extraction and the inverse-highlight renderer.
+ */
+export interface PaneLine {
+  /** 0-based row within the results viewport. */
+  row: number;
+  /** Raw text on the row (borders/padding/gaps included, padded to `width`). */
+  text: string;
+  /** Card border color when this row belongs to a result card. */
+  border?: "green" | "red";
+  /** Dim styling (scrolled-off marker row, or a card header row). */
+  dim?: boolean;
+  /** False for marker/gap rows — excluded from selection extraction. */
+  card: boolean;
+}
+
+/** Ink round-border glyphs (borderStyle: "round"). */
+const ROUND = { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" };
+
+/** Text wrapped exactly like Ink's Text default (hard wrap, no trim). */
+function wrapLines(text: string, inner: number): string[] {
+  return wrapAnsi(text, Math.max(1, inner), { trim: false, hard: true }).split("\n");
+}
+
+/** One card row: raw text plus styling flags for the line model. */
+interface CardRow {
+  text: string;
+  /** Header rows render dim. */
+  dim?: boolean;
+}
+
+/** Full rendered row lines of one card (border included), exactly `width` cols. */
+function cardTextLines(entry: ResultEntry, width: number): CardRow[] {
+  const w = Math.max(1, width);
+  const inner = Math.max(1, w - 4); // width - 2 borders - 2 paddingX
+  const pad = " ".repeat(inner);
+  const mid = (t: string): string => `${ROUND.v} ${t.padEnd(inner)} ${ROUND.v}`;
+  return [
+    { text: `${ROUND.tl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.tr}` },
+    { text: mid(pad) },
+    ...wrapLines(`#${entry.id} $ ${entry.command}`, inner).map((t) => ({ text: mid(t), dim: true })),
+    ...wrapLines(entry.output, inner).map((t) => ({ text: mid(t) })),
+    { text: mid(pad) },
+    { text: `${ROUND.bl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.br}` },
+  ];
+}
+
+/**
+ * The exact rows the results pane would render for a window, as plain lines.
+ *
+ * Mirrors `ResultPane`'s layout: when rows are scrolled off, a dim marker row
+ * and one flex-gap row precede the cards (cards then start at viewport row 2);
+ * the inter-card gap is one row per card except the last; the pane is clipped
+ * to `viewportRows`. The output is always exactly `viewportRows` lines — rows
+ * past the content are blank — so callers can index by viewport-local row.
+ */
+export function buildScreenLines(
+  results: readonly ResultEntry[],
+  scrollTop: number | null,
+  viewportRows: number,
+  width: number,
+): PaneLine[] {
+  const blank = (w: number): string => " ".repeat(w);
+  if (results.length === 0 || viewportRows <= 0) {
+    return Array.from({ length: viewportRows }, (_, row) => ({ row, text: blank(Math.max(0, width)), card: false }));
+  }
+  const markerRows = scrollTop !== null && scrollTop > 0 ? 1 : 0;
+  const cardViewport = Math.max(1, viewportRows - markerRows);
+  const heights = resultHeights(results, Math.max(1, width));
+  const max = scrollMax(heights, cardViewport);
+  const top = scrollTop === null ? max : clampScroll(scrollTop, max);
+  const range = visibleRange(top, heights, cardViewport);
+
+  const lines: PaneLine[] = [];
+  const push = (row: number, text: string, extra: Partial<PaneLine> = {}): void => {
+    lines.push({ row, text, card: extra.card ?? false, ...extra });
+  };
+
+  if (top > 0) {
+    // Ink's wrap:"truncate" reserves the last column for the ellipsis glyph.
+    const markerText = `▲ ${top} rows above — scroll down`;
+    const marker = markerText.length > width ? `${markerText.slice(0, Math.max(1, width - 1))}…` : markerText;
+    push(0, marker.padEnd(width), { dim: true });
+    push(1, blank(width));
+  }
+  // Emit the visible cards, starting `top` rows into the content so the window
+  // [top, top+cardViewport) matches the rows actually on screen. `cum` tracks
+  // each card's content-row offset in heights space (trailing gap included).
+  let cum = 0;
+  for (let i = range.start; i < range.end; i++) {
+    const entry = results[i]!;
+    const border = entry.ok ? "green" : "red";
+    const cardLines = cardTextLines(entry, width);
+    const gapRow = i < results.length - 1 ? 1 : 0;
+    const skip = Math.max(0, Math.min(top - cum, cardLines.length));
+    for (let k = skip; k < cardLines.length; k++) {
+      push(lines.length, cardLines[k]!.text, { border, card: true, ...(cardLines[k]!.dim ? { dim: true } : {}) });
+      if (lines.length >= viewportRows) break;
+    }
+    if (gapRow) push(lines.length, blank(width));
+    if (lines.length >= viewportRows) break;
+    cum += cardLines.length + gapRow;
+  }
+  const out = lines.slice(0, viewportRows);
+  while (out.length < viewportRows) out.push({ row: out.length, text: blank(width), card: false });
+  return out.map((l, i) => ({ ...l, row: i }));
 }

@@ -13,6 +13,10 @@ export interface Layout {
   guideWidth: number;
   /** Exact rows available for the center results viewport. */
   viewportRows: number;
+  /** 1-based terminal row of the results viewport's first row (chrome above it). */
+  viewportTop: number;
+  /** Result card width in columns (full width minus guide panel minus 2 margins). */
+  resultWidth: number;
   /** 1-based terminal row of the input line (for mouse click mapping). */
   inputRow: number;
 }
@@ -43,6 +47,13 @@ export const INFO_ROWS = 1;
 export const FOOTER_ROWS = 3; // single border box + 1 content line
 export const INPUT_ROWS = 1;
 
+/**
+ * First column of the results region inside the frame (1 — the results region
+ * owns the left margin column) plus the ResultPane's paddingX (1). Selection
+ * and mouse coordinates treat col 0 as the card's left border glyph.
+ */
+export const RESULT_LEFT = 2;
+
 export function layout(rows: number, cols: number, guideOn: boolean): Layout {
   const showBanner = rows >= MIN_BANNER_ROWS;
   const showInfo = rows >= MIN_CHROME_ROWS;
@@ -56,7 +67,13 @@ export function layout(rows: number, cols: number, guideOn: boolean): Layout {
   // be forced to ≥1, because that could make chrome + viewport exceed `rows`
   // and push the input line off-screen (visible when the user resizes smaller).
   const viewportRows = Math.max(0, rows - bannerRows - infoRows - footerRows - INPUT_ROWS);
+  // 1-based terminal row of results row 0: frame row 1 is the top, then banner
+  // and info rows (both hidden when the terminal is too short).
+  const viewportTop = 1 + (showBanner ? BANNER_ROWS : 0) + (showInfo ? INFO_ROWS : 0);
+  // Result card width: guideWidth is 0 when hidden, so cols - guideWidth is the
+  // results region width; the pane owns 1 margin column per side.
+  const resultWidth = Math.max(1, cols - guideWidth - 2);
   const inputRow = rows - footerRows;
 
-  return { showBanner, showInfo, showGuide, guideWidth, viewportRows, inputRow };
+  return { showBanner, showInfo, showGuide, guideWidth, viewportRows, viewportTop, resultWidth, inputRow };
 }

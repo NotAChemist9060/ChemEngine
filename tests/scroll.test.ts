@@ -22,15 +22,15 @@ describe("TUI scroll math", () => {
   });
 
   it("computes card height from chrome + wrapped header/body", () => {
-    // 2 borders + 2 paddingY + 1 header line = 5, plus wrapped content.
-    expect(cardRows("hi", "hello", 30)).toBe(7); // inner = 30 - 4 = 26, no wrap
-    expect(cardRows("header", "abcdefghijklmnopqrstuvwxyz0123456789", 30)).toBe(8); // 36-char body wraps to 2 lines
-    expect(cardRows("header", "body", 10)).toBe(7); // inner = 6, still one line each
+    // 2 borders + 2 paddingY = 4 chrome rows, plus wrapped header/body.
+    expect(cardRows("hi", "hello", 30)).toBe(6); // inner = 30 - 4 = 26, no wrap
+    expect(cardRows("header", "abcdefghijklmnopqrstuvwxyz0123456789", 30)).toBe(7); // 36-char body wraps to 2 lines
+    expect(cardRows("header", "body", 10)).toBe(6); // inner = 6, still one line each
   });
 
   it("adds the inter-card gap row to every card but the last", () => {
     const one = resultHeights([{ id: 1, command: "a", output: "b", ok: true }], 30);
-    expect(one).toEqual([7]); // no gap after the last card
+    expect(one).toEqual([6]); // no gap after the last card
     const three = resultHeights(
       [
         { id: 1, command: "a", output: "b", ok: true },
@@ -39,12 +39,12 @@ describe("TUI scroll math", () => {
       ],
       30,
     );
-    expect(three).toEqual([8, 8, 7]);
+    expect(three).toEqual([7, 7, 6]);
     expect(resultHeights([], 30)).toEqual([]);
   });
 
   it("computes the farthest scroll offset that still shows the newest content", () => {
-    expect(scrollMax([8, 8, 7], 10)).toBe(13); // 23 rows - 10 viewport
+    expect(scrollMax([7, 7, 6], 10)).toBe(10); // 20 rows - 10 viewport
     expect(scrollMax([3], 5)).toBe(0); // content fits → no scroll
     expect(scrollMax([], 5)).toBe(0);
   });

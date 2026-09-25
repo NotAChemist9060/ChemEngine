@@ -1,16 +1,16 @@
 import { createElement, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { useApp, useInput, useWindowSize } from "ink";
+import { useApp, useInput, useStdout, useWindowSize } from "ink";
 import { runCommand, VERSION } from "../cli/commands.ts";
 import { tokenizeLine } from "../cli/repl.ts";
 import { allElements } from "../core/elements.ts";
 import { candidatesFor, commandNames, lastToken } from "./completions.ts";
 import { keyToAction } from "./keymap.ts";
-import { layout, viewHeight, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS } from "./layout.ts";
+import { layout, viewHeight, BANNER_ROWS, FOOTER_ROWS, INFO_ROWS, INPUT_ROWS, RESULT_LEFT } from "./layout.ts";
 import { guideSections, Guide } from "./guide.ts";
 import { filterPalette, paletteItems } from "./palette-list.ts";
 import { loadConfig, loadHistory, saveConfig, saveHistory } from "./persist.ts";
 import { initialState, reducer, type TuiConfig } from "./state.ts";
-import { pageStep, resultHeights, scrollMax, WHEEL_STEP } from "./scroll.ts";
+import { buildScreenLines, pageStep, resultHeights, scrollMax, WHEEL_STEP } from "./scroll.ts";
 import { box, text } from "./el.ts";
 import type { MouseIntent } from "./mouse.ts";
 import { MouseBridge } from "./mousebridge.ts";
@@ -20,14 +20,22 @@ import { InputBar } from "./inputbar.ts";
 import { Palette } from "./palette.ts";
 import { ResultPane } from "./resultpane.ts";
 import { Spinner } from "./spinner.ts";
+import { extendSelection, extractSelectionText, hasArea, startSelection, type Selection } from "./select.ts";
+import { writeClipboard } from "./clipboard.ts";
 
 export interface AppProps {
   config?: TuiConfig;
   historySeed?: string[];
+  /**
+   * Test seam: receives a sink that feeds raw SGR bytes into the mouse parser
+   * (headless drag testing — see MouseBridge's `emitToParser`).
+   */
+  testEmitMouse?: (emit: (seq: string) => void) => void;
 }
 
-export function App({ config, historySeed }: AppProps) {
+export function App({ config, historySeed, testEmitMouse }: AppProps) {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const { rows, columns } = useWindowSize();
   const cfg = config ?? loadConfig();
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(cfg, historySeed ?? loadHistory()));
@@ -42,6 +50,16 @@ export function App({ config, historySeed }: AppProps) {
   const viewRows = viewHeight(rows);
   const lay = layout(viewRows, columns, state.guideOn);
 
+  // Mouse intents run in a stable callback (useCallback([])), so any state,
+  // geometry or stream they need must be read through refs refreshed here.
+  const selRef = useRef<Selection | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const geomRef = useRef(lay);
+  geomRef.current = lay;
+  const stdoutRef = useRef(stdout);
+  stdoutRef.current = stdout;
+
   // Persist command history and the guide preference when they change.
   useEffect(() => {
     saveHistory(state.inputHistory);
@@ -49,6 +67,11 @@ export function App({ config, historySeed }: AppProps) {
   useEffect(() => {
     saveConfig({ resultLimit: cfg.resultLimit, bannerOn: cfg.bannerOn, guideOn: state.guideOn });
   }, [state.guideOn, cfg.bannerOn, cfg.resultLimit]);
+
+  // A window resize invalidates in-flight drag coordinates — drop any selection.
+  useEffect(() => {
+    dispatch({ type: "select-cancel" });
+  }, [rows, columns, dispatch]);
 
   const palette = state.paletteOpen ? filterPalette(paletteItems(), state.paletteQuery) : [];
   const paletteIdx = palette.length > 0 ? state.paletteIndex % palette.length : 0;
@@ -58,24 +81,61 @@ export function App({ config, historySeed }: AppProps) {
     elementCount: allElements().length,
   });
 
-  // Exact card width for height/scroll math: full width minus the guide panel
-  // and the result pane's 1-col padding on each side — the same width the
-  // cards are rendered with, so wrap counts match Ink exactly.
-  const cardWidth = Math.max(1, columns - (lay.showGuide ? lay.guideWidth : 0) - 2);
   // Scroll extent of the current result stack, recomputed every render.
-  const scrollMaxRows = scrollMax(resultHeights(state.results, cardWidth), lay.viewportRows);
+  const scrollMaxRows = scrollMax(resultHeights(state.results, lay.resultWidth), lay.viewportRows);
 
   // Mouse intents need the freshest scroll max without re-registering the
   // stdin listener; the bridge reads through a ref updated each render.
   const maxRef = useRef(scrollMaxRows);
   maxRef.current = scrollMaxRows;
   const onMouseIntent = useCallback((intent: MouseIntent) => {
-    if (intent.kind === "scroll") {
-      const max = maxRef.current;
-      if (intent.dir === 1) dispatch({ type: "wheel-up", max, step: WHEEL_STEP });
-      else dispatch({ type: "wheel-down", max, step: WHEEL_STEP });
-    } else {
-      dispatch({ type: "set-cursor", index: intent.index });
+    switch (intent.kind) {
+      case "scroll": {
+        const max = maxRef.current;
+        if (intent.dir === 1) dispatch({ type: "wheel-up", max, step: WHEEL_STEP });
+        else dispatch({ type: "wheel-down", max, step: WHEEL_STEP });
+        return;
+      }
+      case "set-cursor":
+        dispatch({ type: "set-cursor", index: intent.index });
+        return;
+      case "select-start":
+        dispatch({ type: "select-start", row: intent.row, col: intent.col });
+        // Reducer dispatches are synchronous but renders are not, so a release
+        // arriving in the same stdin chunk as the last motion would read a stale
+        // box from a ref that only updates on render. Mirror the box here
+        // synchronously so finish always copies exactly what was dragged.
+        selRef.current = startSelection(intent.row, intent.col);
+        return;
+      case "select-extend":
+        dispatch({ type: "select-extend", row: intent.row, col: intent.col });
+        if (selRef.current) selRef.current = extendSelection(selRef.current, intent.row, intent.col);
+        return;
+      case "select-finish": {
+        const sel = selRef.current;
+        selRef.current = null; // one copy per drag — a stray release can't re-fire
+        if (sel === null || !hasArea(sel)) {
+          dispatch({ type: "select-cancel" });
+          return;
+        }
+        const g = geomRef.current;
+        const snap = stateRef.current;
+        const copied = extractSelectionText(
+          buildScreenLines(snap.results, snap.scrollTop, g.viewportRows, g.resultWidth),
+          sel,
+        );
+        dispatch({ type: "select-cancel" }); // highlight clears with the release
+        const mode = writeClipboard(copied, stdoutRef.current);
+        if (mode === "none") return;
+        setStatus(
+          mode === "file"
+            ? `copied ${copied.length} chars → last-selection.txt`
+            : `copied ${copied.length} chars`,
+        );
+        return;
+      }
+      default:
+        return;
     }
   }, []);
 
@@ -151,6 +211,15 @@ export function App({ config, historySeed }: AppProps) {
         if (state.input !== "" && !running) void execute(state.input);
         return;
       case "cancel":
+        // Esc order: command palette → active selection → input line.
+        if (state.paletteOpen) {
+          dispatch({ type: "palette-close" });
+          return;
+        }
+        if (state.selection !== null) {
+          dispatch({ type: "select-cancel" });
+          return;
+        }
         dispatch({ type: "clear-input" });
         return;
       case "exit":
@@ -224,8 +293,18 @@ export function App({ config, historySeed }: AppProps) {
   return box(
     { flexDirection: "column", height: viewRows },
     createElement(MouseBridge, {
-      ctx: { active: !state.paletteOpen, inputRow: lay.inputRow, inputLength: state.input.length },
+      ctx: {
+        active: !state.paletteOpen,
+        inputRow: lay.inputRow,
+        inputLength: state.input.length,
+        viewportTop: lay.viewportTop,
+        viewportRows: lay.viewportRows,
+        resultLeft: RESULT_LEFT,
+        resultWidth: lay.resultWidth,
+        selectionActive: state.selection !== null,
+      },
       onIntent: onMouseIntent,
+      ...(testEmitMouse !== undefined ? { emitToParser: testEmitMouse } : {}),
     }),
     lay.showBanner
       ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: VERSION }))
@@ -244,14 +323,20 @@ export function App({ config, historySeed }: AppProps) {
                 results: state.results,
                 scrollTop: state.scrollTop,
                 viewportRows: lay.viewportRows,
-                width: cardWidth,
+                width: lay.resultWidth,
+                selection: state.selection,
               }),
             ),
             lay.showGuide ? createElement(Guide, { sections, width: lay.guideWidth }) : null,
           ),
           state.paletteOpen ? createElement(Palette, { items: palette, index: paletteIdx, query: state.paletteQuery }) : null,
           running ? box({ paddingX: 1 }, createElement(Spinner, { label: "computing…" })) : null,
-          status !== undefined ? box({ paddingX: 1 }, text({ color: "yellow" }, status)) : null,
+          // Overlay, not a layout row: a status line must not reflow the results
+          // region (that would repaint the whole pane and break incremental
+          // rendering — the toast pins to the viewport's bottom row instead).
+          status !== undefined
+            ? box({ position: "absolute", bottom: 0, paddingX: 1 }, text({ color: "yellow" }, status))
+            : null,
         )
       : null,
     box({ height: INPUT_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(InputBar, { value: state.input, cursor: state.cursor })),

@@ -124,7 +124,7 @@ Acceptance: `npm test` + `tsc --noEmit` green (**136 tests**); live check — no
 - ✅ Task B — flicker fix: `VIEW_PAD`/`viewHeight` in `layout.ts`, `app.ts` layout + root height from `viewHeight(rows)`; `renderFrame` helper, pinned 24×160 regression and geometry matrix all derive from the same exports (deterministic on any OS). `tui-render` 13 green.
 - ✅ Task C — litter fix: `SGR_TAIL_RE` guard + new keymap test feeding the Ink-stripped tails (dropped; printable input still inserts). `tui.test.ts` 36 → 37.
 - ✅ Task D — gate `npm test` 136/136 + `tsc --noEmit` clean; README (v0.2.2, flicker + litter bullets, M2b.2 milestone row) + this plan doc updated; committed + pushed (`nac9060`).
-- ⏳ Select & copy (drag-select + OSC 52) — still backlogged, not started this sprint.
+- ✅ Select & copy (drag-select + OSC 52) — shipped in M2b.4 (v0.2.4).
 
 Current totals: 136 tests green (12 files, incl. `tui-render` 13, `tui` 37, `scroll` 7, `mouse` 12); `src/` typechecks clean; nothing red.
 
@@ -146,6 +146,10 @@ Fix: `src/tui/index.ts` — `TUI_RENDER_OPTIONS` += `incrementalRendering: true`
 Regression: `tests/ink-writes.test.ts` mounts the real `App` on fake TTY streams (`FakeTtyStdin` swallows `data` registrations so Ink's `readable`-based input path works; `ref`/`unref`/`setRawMode` stubs; `os.homedir` redirected to a throwaway dir) and asserts per-keystroke writes stay < 400 B with no full-frame erase. (Harness lessons: base `Readable` has no `ref`/`unref`, and a missing stub silently kills Ink's input effects at mount.)
 
 Acceptance: `npm test` + `tsc --noEmit` green (**138 tests**); Task 10 live check — continuous typing with the guide open must be rock-solid.
+
+### M2b.4 — select & copy sprint (v0.2.4)
+
+**Shipped (2026-09-25):** drag-select over result cards → release copies the slice via OSC 52 (fallback `~/.chemengine/last-selection.txt` on non-TTY). Highlights render **per-cell** (selected = flat inverse, no color/dim; box border glyphs keep the card color; headers stay dim) for byte-parity with the card-box path, so switching paths mid-drag only rewrites the highlighted lines. Blockers solved along the way: chalk strips styles at import on a non-TTY → `FORCE_COLOR=1` + dynamic imports in the E2E harness; Ink's `createIncremental` diffs **whole lines** (`log-update.js:172-189`), so a 2-row highlight costs ~563 B/event — the drag test's bounds reflect that (motion <1200, release <1500) while keystrokes keep the tight <400 B guard. Esc order: palette → selection → clear-input; typing/scroll/^L/resize clear the highlight; history ↑/↓ deliberately keep it. **198 tests green (17 files), `tsc` clean; committed + pushed (`nac9060`); live-terminal check = Task 10.**
 
 ---
 
@@ -249,8 +253,9 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2 — console UX: global `chem` command + local launchers, REPL with help/examples/suggestions, ANSI TTY output (66 tests green)
 - [x] M2b — console TUI: Ink banner/panels/footer, hotkeys + Tab completion, `/` palette, scrollable result history, `~/.chemengine` config persistence, TTY auto-fallback; v0.2.0 (105 tests green) — incl. adaptive fixed-pinned layout + `Ctrl+G` guide panel
 - [x] M2b.1 — TUI hotfix sprint v0.2.1 (pinned layout, row-based scroll, autoscroll, SGR mouse wheel/click, resize-safe chrome) — 135 tests green, `tsc` clean, pushed; live-terminal check = Task 10 (pending at commit time)
-- [x] M2b.2 — TUI polish v0.2.2 (one-row-under-viewport frame, keymap guard against Ink-stripped mouse tails) — 136 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10; select & copy still backlogged
+- [x] M2b.2 — TUI polish v0.2.2 (one-row-under-viewport frame, keymap guard against Ink-stripped mouse tails) — 136 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10; select & copy → M2b.4
 - [x] M2b.3 — anti-blink v0.2.3 (enable Ink incremental rendering: per-keystroke writes drop to just the input row, no full-frame erase+redraw) — 138 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10
+- [x] M2b.4 — select & copy v0.2.4 (drag-select over results → release copies via OSC 52, `~/.chemengine/last-selection.txt` fallback; selection-aware incremental rendering; per-cell highlight parity) — 198 tests green, `tsc` clean, pushed; live-terminal check = Task 10
 - [ ] M3 — structure + classification
 - [ ] M4 — prediction (rules + thermodynamics)
 - [ ] M5 — kinetics + CLI polish

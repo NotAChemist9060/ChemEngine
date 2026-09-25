@@ -1,4 +1,5 @@
 import { lastToken } from "./completions.ts";
+import { extendSelection, startSelection, type Selection } from "./select.ts";
 
 export interface TuiConfig {
   /** How many result cards are visible (scroll beyond this) — persisted. */
@@ -37,6 +38,13 @@ export interface TuiState {
    * whenever a command is submitted (further results push the view to bottom).
    */
   scrollTop: number | null;
+  /**
+   * Active drag selection over the results viewport (viewport-local), or null.
+   * Cleared by typing, scrolling, submitting, clearing results, toggling the
+   * guide, or opening the palette; preserved across caret moves, palette-close,
+   * clear-input, and history recall.
+   */
+  selection: Selection | null;
   paletteOpen: boolean;
   paletteQuery: string;
   paletteIndex: number;
@@ -54,6 +62,7 @@ export function initialState(config: TuiConfig = DEFAULT_CONFIG, seedHistory: st
     historyIndex: -1,
     results: [],
     scrollTop: null,
+    selection: null,
     paletteOpen: false,
     paletteQuery: "",
     paletteIndex: 0,
@@ -81,6 +90,9 @@ export type TuiAction =
   | { type: "wheel-up"; max: number; step: number }
   | { type: "wheel-down"; max: number; step: number }
   | { type: "set-cursor"; index: number }
+  | { type: "select-start"; row: number; col: number }
+  | { type: "select-extend"; row: number; col: number }
+  | { type: "select-cancel" }
   | { type: "toggle-guide" }
   | { type: "palette-toggle" }
   | { type: "palette-close" }
@@ -99,24 +111,28 @@ function scrollBy(state: TuiState, delta: number, max: number): TuiState {
   const bottom = Math.max(0, max);
   const from = state.scrollTop === null ? bottom : state.scrollTop;
   const next = Math.min(Math.max(0, from + delta), bottom);
-  return { ...state, scrollTop: next >= bottom ? null : next };
+  return { ...state, scrollTop: next >= bottom ? null : next, selection: null };
 }
 
 export function reducer(state: TuiState, action: TuiAction): TuiState {
   switch (action.type) {
     case "insert": {
       const input = state.input.slice(0, state.cursor) + action.text + state.input.slice(state.cursor);
-      return { ...state, input, cursor: state.cursor + action.text.length };
+      return { ...state, input, cursor: state.cursor + action.text.length, selection: null };
     }
     case "backspace": {
-      if (state.cursor <= 0) return state;
+      if (state.cursor <= 0) {
+        return state.selection === null ? state : { ...state, selection: null };
+      }
       const input = state.input.slice(0, state.cursor - 1) + state.input.slice(state.cursor);
-      return { ...state, input, cursor: state.cursor - 1 };
+      return { ...state, input, cursor: state.cursor - 1, selection: null };
     }
     case "delete": {
-      if (state.cursor >= state.input.length) return state;
+      if (state.cursor >= state.input.length) {
+        return state.selection === null ? state : { ...state, selection: null };
+      }
       const input = state.input.slice(0, state.cursor) + state.input.slice(state.cursor + 1);
-      return { ...state, input };
+      return { ...state, input, selection: null };
     }
     case "left":
       return state.cursor > 0 ? { ...state, cursor: state.cursor - 1 } : state;
@@ -151,6 +167,7 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
           { id: state.nextResultId, command: action.command, output: action.output, ok: action.ok },
         ],
         scrollTop: null,
+        selection: null,
         nextResultId: state.nextResultId + 1,
         input: "",
         cursor: 0,
@@ -158,7 +175,7 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
     case "clear-input":
       return { ...state, input: "", cursor: 0 };
     case "clear-results":
-      return { ...state, results: [], scrollTop: null };
+      return { ...state, results: [], scrollTop: null, selection: null };
     case "scroll-up":
       return scrollBy(state, -Math.max(1, action.page), action.max);
     case "scroll-down":
@@ -169,12 +186,20 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
       return scrollBy(state, +Math.max(1, action.step), action.max);
     case "set-cursor":
       return { ...state, cursor: Math.min(Math.max(0, action.index), state.input.length) };
+    case "select-start":
+      return { ...state, selection: startSelection(action.row, action.col) };
+    case "select-extend": {
+      if (state.selection === null) return state;
+      return { ...state, selection: extendSelection(state.selection, action.row, action.col) };
+    }
+    case "select-cancel":
+      return state.selection === null ? state : { ...state, selection: null };
     case "toggle-guide":
-      return { ...state, guideOn: !state.guideOn };
+      return { ...state, guideOn: !state.guideOn, selection: null };
     case "palette-toggle":
       return state.paletteOpen
         ? { ...state, paletteOpen: false }
-        : { ...state, paletteOpen: true, paletteQuery: "", paletteIndex: 0 };
+        : { ...state, paletteOpen: true, paletteQuery: "", paletteIndex: 0, selection: null };
     case "palette-close":
       return { ...state, paletteOpen: false };
     case "palette-up":
@@ -197,11 +222,13 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
       };
     }
     case "complete": {
-      if (action.candidates.length === 0) return state;
+      if (action.candidates.length === 0) {
+        return state.selection === null ? state : { ...state, selection: null };
+      }
       const token = lastToken(state.input);
       const word = action.candidates[action.cycle % action.candidates.length]!;
       const input = state.input.slice(0, state.input.length - token.length) + word;
-      return { ...state, input, cursor: input.length };
+      return { ...state, input, cursor: input.length, selection: null };
     }
     default:
       return state;

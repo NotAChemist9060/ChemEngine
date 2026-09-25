@@ -37,6 +37,7 @@ export function guideSections({ version, commands, elementCount }: GuideContentA
         "↑ ↓ command history",
         "PgUp/Dn · wheel scroll",
         "click input → caret",
+        "drag results → copy",
         "^L clear results",
         "^G show/hide this guide",
         "^C exit",

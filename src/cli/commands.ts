@@ -4,7 +4,7 @@ import { getElement } from "../core/elements.ts";
 import { paint, renderBalanced, renderElement } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
-export const VERSION = "0.2.3";
+export const VERSION = "0.2.4";
 
 /** An error meant for the user (clean message, no stack trace). */
 export class UserError extends Error {}

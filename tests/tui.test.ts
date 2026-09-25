@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initialState, reducer, DEFAULT_CONFIG } from "../src/tui/state.ts";
+import { initialState, reducer, DEFAULT_CONFIG, type TuiAction } from "../src/tui/state.ts";
 import { keyToAction, SGR_TAIL_RE, type PressedKey } from "../src/tui/keymap.ts";
 import { candidatesFor, commandNames, lastToken } from "../src/tui/completions.ts";
 import { filterPalette, paletteItems } from "../src/tui/palette-list.ts";
@@ -13,6 +13,13 @@ import { TUI_RENDER_OPTIONS } from "../src/tui/index.ts";
 
 function press(p: PressedKey, input = ""): { input: string; key: PressedKey } {
   return { input, key: p };
+}
+
+/** A reducer state with an active drag selection over the results viewport. */
+function selected() {
+  let s = initialState();
+  s = reducer(s, { type: "select-start", row: 1, col: 1 });
+  return reducer(s, { type: "select-extend", row: 2, col: 3 });
 }
 
 describe("TUI keymap", () => {
@@ -199,6 +206,84 @@ describe("TUI reducer", () => {
     s = reducer(s, { type: "clear-results" });
     expect(s.results).toHaveLength(0);
   });
+
+  it("starts with no active selection", () => {
+    expect(initialState().selection).toBeNull();
+  });
+
+  it("pins anchor = active on select-start and moves only the active corner on select-extend", () => {
+    let s = initialState();
+    s = reducer(s, { type: "select-start", row: 3, col: 2 });
+    expect(s.selection).toEqual({ anchorRow: 3, anchorCol: 2, activeRow: 3, activeCol: 2 });
+    s = reducer(s, { type: "select-extend", row: 5, col: 7 });
+    expect(s.selection).toEqual({ anchorRow: 3, anchorCol: 2, activeRow: 5, activeCol: 7 });
+    s = reducer(s, { type: "select-extend", row: 3, col: 2 });
+    expect(s.selection).toEqual({ anchorRow: 3, anchorCol: 2, activeRow: 3, activeCol: 2 });
+  });
+
+  it("is a no-op when extending without a live selection", () => {
+    const s = initialState();
+    expect(reducer(s, { type: "select-extend", row: 1, col: 1 })).toBe(s);
+  });
+
+  it("clears the selection on select-cancel", () => {
+    let s = reducer(initialState(), { type: "select-start", row: 1, col: 1 });
+    s = reducer(s, { type: "select-extend", row: 3, col: 4 });
+    expect(s.selection).not.toBeNull();
+    s = reducer(s, { type: "select-cancel" });
+    expect(s.selection).toBeNull();
+    // Already null → same object, no churn.
+    expect(reducer(s, { type: "select-cancel" })).toBe(s);
+  });
+
+  it("clears the selection on typing, scrolling, submitting, clearing, and guide toggles", () => {
+    const cases: TuiAction[] = [
+      { type: "insert", text: "x" },
+      { type: "backspace" },
+      { type: "delete" },
+      { type: "complete", candidates: ["balance"], cycle: 0 },
+      { type: "submit", command: "element O", output: "O", ok: true },
+      { type: "clear-results" },
+      { type: "scroll-up", max: 20, page: 8 },
+      { type: "scroll-down", max: 20, page: 8 },
+      { type: "wheel-up", max: 20, step: 3 },
+      { type: "wheel-down", max: 20, step: 3 },
+      { type: "toggle-guide" },
+    ];
+    for (const action of cases) {
+      const s = reducer(selected(), action);
+      expect(s.selection, `${action.type} should clear the selection`).toBeNull();
+    }
+  });
+
+  it("keeps the selection object across caret moves, palette-close, clear-input, and history recall", () => {
+    const cases: TuiAction[] = [
+      { type: "left" },
+      { type: "right" },
+      { type: "home" },
+      { type: "end" },
+      { type: "palette-close" },
+      { type: "clear-input" },
+      { type: "history-up" },
+      { type: "history-down" },
+    ];
+    for (const action of cases) {
+      const before = selected();
+      const after = reducer(before, action);
+      expect(after.selection, `${action.type} should preserve the selection object`).toBe(before.selection);
+    }
+  });
+
+  it("clears the selection when the palette opens but preserves it when it closes", () => {
+    let s = selected(); // palette closed, selection active
+    s = reducer(s, { type: "palette-toggle" });
+    expect(s.paletteOpen).toBe(true);
+    expect(s.selection).toBeNull();
+    s = reducer(s, { type: "select-start", row: 1, col: 1 });
+    s = reducer(s, { type: "palette-toggle" });
+    expect(s.paletteOpen).toBe(false);
+    expect(s.selection).toEqual({ anchorRow: 1, anchorCol: 1, activeRow: 1, activeCol: 1 });
+  });
 });
 
 describe("TUI completions", () => {
@@ -285,11 +370,25 @@ describe("TUI layout math", () => {
     expect(layout(1, 40, true).viewportRows).toBe(0);
     expect(layout(1, 40, true).inputRow).toBe(1);
   });
+
+  it("computes viewportTop as 1 plus the chrome rows above the results region", () => {
+    expect(layout(40, 160, true).viewportTop).toBe(7); // 1 + banner 5 + info 1
+    expect(layout(11, 200, true).viewportTop).toBe(6); // info hidden below MIN_CHROME_ROWS
+    expect(layout(5, 40, true).viewportTop).toBe(1); // banner hidden too
+  });
+
+  it("computes resultWidth as cols minus guide width minus 2 margin columns", () => {
+    expect(layout(40, 160, true).resultWidth).toBe(110); // 160 - guide 48 - 2
+    expect(layout(60, 200, true).resultWidth).toBe(150); // guide capped at 48
+    expect(layout(60, MIN_GUIDE_COLUMNS - 1, true).resultWidth).toBe(102); // guide hidden → 0
+    expect(layout(40, 200, false).resultWidth).toBe(198); // guide toggled off
+    expect(layout(1, 40, true).resultWidth).toBe(38); // narrow, guide hidden
+  });
 });
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.3", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.4", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -300,12 +399,12 @@ describe("TUI guide content", () => {
     expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.3");
+    expect(engine).toContain("v0.2.4");
   });
 
   it("keeps every guide line within the narrowest panel inner width", () => {
     // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
-    const sections = guideSections({ version: "0.2.3", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.4", commands: ["balance", "element"], elementCount: 118 });
     for (const s of sections) {
       for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
     }
