@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.2.4                autonomous · offline · local   ║
+║  ChemEngine v0.2.5                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -71,7 +71,7 @@ Built on [Ink](https://github.com/vadimdemedes/ink) (the same terminal-UI stack 
 - Results render as bordered cards — green for success, red for errors — and persist across the session.
 - The layout is **pinned**: the banner + engine-info strip (top) and the input + key-hint footer (bottom) are fixed-height chrome that can never be squeezed away; the middle region owns **all** scrolling. It clips its own rows and scrolls them row-by-row — `PgUp/PgDn` page by a viewport, the mouse wheel steps by 3. Scrolling to the bottom re-pins to **autoscroll**, which follows the newest output; a `▲ N rows above — scroll down` marker shows how many rows are scrolled off.
 - The input line survives any window size: on short terminals the banner/info/footer chrome collapses instead of the input getting pushed off-screen.
-- Mouse support (real terminals): the wheel scrolls only the center results window, and clicking the input line moves the cursor to the clicked position. **Dragging left across a result card** highlights a slice (inverse); releasing **copies it to the clipboard via OSC 52**, falling back to `~/.chemengine/last-selection.txt` when stdout isn't a TTY. **Hold Shift while dragging** to let the terminal do its native select/copy instead. Mouse bytes are dropped at the keymap, so clicks never type characters into the input.
+- Mouse support (real terminals): the wheel scrolls only the center results window, and clicking the input line moves the cursor to the clicked position. **Dragging left across a result card** highlights a slice (inverse); releasing **copies it through the first method that succeeds** — on Windows a hidden `clip.exe` (`copied N chars → native clipboard`), otherwise OSC 52 (`→ terminal clipboard`), otherwise `~/.chemengine/last-selection.txt` (`→ last-selection.txt`) — and the toast always names the method that actually worked, because a terminal may accept an OSC 52 request and still ignore it. Copied text is sliced by terminal display column, so wide glyphs and styled output come out clean. **Hold Shift while dragging** to let the terminal do its native select/copy instead. Mouse bytes are dropped at the keymap, so clicks never type characters into the input.
 - Rendering is **flicker-free** two ways: Ink's *incremental rendering* is on, so typing rewrites only the changed input row (~105 B/keystroke) instead of erasing and redrawing the whole frame (~3.7 KB/keystroke on a wide terminal with the guide open); and the frame is sized one row under the terminal height so Ink never classifies it as *fullscreen*, which on Windows would force-clear the whole terminal on every render.
 - On wide terminals (≥105 cols) a **guide panel** (commands, keys, engine facts) docks on the right; `Ctrl+G` toggles it.
 - **`help`, `examples`, `clear`, `exit`** are built-in; `help balance` works too.
@@ -199,6 +199,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M2b.2 | TUI polish (v0.2.2): one-row-under-viewport frame (dodges the win32 fullscreen clear path), keymap guard against mouse-click litter | ✅ done |
 | M2b.3 | Anti-blink (v0.2.3): enable Ink incremental rendering — per-keystroke writes drop to just the input row (no full-frame erase+redraw) | ✅ done |
 | M2b.4 | Select & copy (v0.2.4): drag over results → inverse highlight → release copies via OSC 52 (file fallback), Esc clears | ✅ done |
+| M2b.5 | Copy/scroll/geometry fixes (v0.2.5): native Windows `clip.exe` clipboard chain, display-cell line model (wide glyphs + ANSI keep card borders flush), true-bottom scroll + resize re-clamp | ✅ done |
 | M3 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
 | M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |

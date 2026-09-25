@@ -206,4 +206,27 @@ describe("ResultPane selection highlight", () => {
     expect(marker.some((c) => c.st.inverse), "marker row is never selected").toBe(false);
     expect(marker.some((c) => c.st.color !== null), "marker row has no border color").toBe(false);
   });
+
+  it("reapplies body SGR styling from cells without putting controls in the line model", async () => {
+    const { startSelection } = await load();
+    const styled: ResultEntry = {
+      id: 1,
+      command: "x",
+      output: "\x1b[1;32mred\x1b[0m",
+      ok: true,
+    };
+    // Select a blank row so the body remains unhighlighted while still exercising
+    // the same render path as an idle pane.
+    const { rendered, lines } = await renderSelectionPane([styled], 0, 8, 14, startSelection(7, 0));
+    const body = rendered[3] ?? "";
+    const visible = body.replace(/\x1b\[[0-9;]*m/g, "");
+
+    expect(visible).toContain("red");
+    expect(body).toMatch(/\x1b\[(?:1|32)m/);
+    expect(lines[3]!.text).not.toContain("\x1b");
+    expect(lines[3]!.cells?.find((cell) => cell.value === "r")?.style).toMatchObject({
+      bold: true,
+      color: "green",
+    });
+  });
 });

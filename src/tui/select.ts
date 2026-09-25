@@ -1,3 +1,9 @@
+import {
+  displayWidth,
+  makeDisplayLine,
+  sliceDisplayLine,
+  type DisplayLine,
+} from "./display.ts";
 import type { PaneLine } from "./scroll.ts";
 
 /**
@@ -54,15 +60,23 @@ export function selectionCell(sel: Selection, row: number, col: number): boolean
   return row >= box.top && row <= box.bottom && col >= box.left && col <= box.right;
 }
 
+function displayLineFor(line: PaneLine): DisplayLine {
+  if (line.cells !== undefined) {
+    return { text: line.text, cells: line.cells, width: displayWidth(line.text) };
+  }
+  return makeDisplayLine(line.text, displayWidth(line.text));
+}
+
 /**
  * The plain text a selection captures from rendered screen lines.
  *
- * Per selected row (inside the inclusive box): card rows contribute the column
- * slice `[left, right]` of their raw text with trailing whitespace trimmed;
+ * Per selected row (inside the inclusive box): card rows contribute the
+ * display-column slice `[left, right]` with trailing whitespace trimmed;
  * non-card rows contribute a blank line when they are visually blank (the
  * inter-card gap / bottom fill — preserving the on-screen separator between
  * two cards) and are skipped entirely when they carry UI text (the dim
- * "rows above" marker). Trailing blank lines are dropped.
+ * "rows above" marker). ANSI controls and JS UTF-16 indexes never enter the
+ * copied string.
  */
 export function extractSelectionText(lines: readonly PaneLine[], sel: Selection): string {
   const box = normalizedBox(sel);
@@ -70,11 +84,12 @@ export function extractSelectionText(lines: readonly PaneLine[], sel: Selection)
   for (let row = box.top; row <= box.bottom; row++) {
     const line = lines[row];
     if (!line) continue; // box extends past the viewport's rows
+    const displayLine = displayLineFor(line);
     if (!line.card) {
-      if (line.text.trim() === "") rows.push(""); // gap/padding → blank line
+      if (displayLine.text.trim() === "") rows.push(""); // gap/padding → blank line
       continue; // marker row → excluded entirely
     }
-    rows.push(line.text.slice(box.left, box.right + 1).trimEnd());
+    rows.push(sliceDisplayLine(displayLine, box.left, box.right).trimEnd());
   }
   while (rows.length > 0 && rows[rows.length - 1] === "") rows.pop();
   return rows.join("\n");

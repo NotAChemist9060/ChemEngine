@@ -79,20 +79,19 @@ describe("TUI screen-line model — card composition", () => {
 
 describe("TUI screen-line model — marker rows and blank fill", () => {
   it("places marker + gap at rows 0-1, then the windowed content from row 2", () => {
-    // [OK, BAD] at width 40 → heights [7, 6] (13 rows); viewport 10, marker →
-    // cardViewport 9, max 4. top=4 clips into card 1 (pad + bottom border),
-    // then the gap and card 2 entirely.
+    // [OK, BAD] at width 40 → heights [7, 6] (13 rows); viewport 10, marker
+    // rows are reserved, so the true bottom offset is 13 − (10 − 2) = 5.
+    // The window [5, 13) is card 1's bottom border, the gap, and card 2.
     const lines = buildScreenLines([OK, BAD], 5, 10, 40);
     expect(lines).toHaveLength(10);
-    expect(lines[0]).toMatchObject({ text: "▲ 4 rows above — scroll down".padEnd(40), dim: true, card: false });
+    expect(lines[0]).toMatchObject({ text: "▲ 5 rows above — scroll down".padEnd(40), dim: true, card: false });
     expect(lines[1]).toMatchObject({ text: " ".repeat(40), card: false });
-    expect(lines[2]!.text).toMatch(/^│ .* │$/); // card 1, clipped to its pad row
-    expect(lines[3]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "green" }); // card 1 bottom border
-    expect(lines[4]).toMatchObject({ text: " ".repeat(40), card: false }); // gap
-    expect(lines[5]!.text).toContain("╭"); // card 2 top border
-    expect(lines[7]!.text).toContain("#2 $ b"); // card 2 header (row-start skip worked)
-    expect(lines[9]).toMatchObject({ card: true, border: "red" }); // card 2 clipped below its bottom border
-    expect(lines[9]!.text).toMatch(/^│ .* │$/);
+    expect(lines[2]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "green" });
+    expect(lines[3]).toMatchObject({ text: " ".repeat(40), card: false }); // inter-card gap
+    expect(lines[4]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "red" });
+    expect(lines[6]!.text).toContain("#2 $ b");
+    expect(lines[7]!.text).toContain("error!");
+    expect(lines[9]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" });
   });
 
   it("returns all-blank rows for an empty result set", () => {
@@ -120,33 +119,46 @@ describe("TUI screen-line model — windows past the first card (range.start > 0
   ] as const;
 
   it("renders the true window when scrolled past the first card", () => {
-    // cardViewport 9 (marker), max = 20 - 9 = 11; scrollTop 12 clamps to 11.
-    // Window [11, 20): card 1 rows 4-5 (pad + bottom border), gap, card 2 full.
+    // 20 content rows, 10 viewport, and two marker rows → max 12. The window
+    // [12, 20) is card 1's bottom border, the gap, and card 2 in full.
     const lines = buildScreenLines(THREE, 12, 10, 40);
     expect(lines).toHaveLength(10);
-    expect(lines[0]).toMatchObject({ text: "▲ 11 rows above — scroll down".padEnd(40), dim: true, card: false });
-    expect(lines[2]).toMatchObject({ text: `│${" ".repeat(38)}│`, card: true, border: "red" }); // card 1 pad
-    expect(lines[3]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" }); // card 1 bottom border
-    expect(lines[4]).toMatchObject({ text: " ".repeat(40), card: false }); // gap
-    expect(lines[5]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" }); // card 2 top
-    expect(lines[7]).toMatchObject({ dim: true, card: true }); // card 2 header
-    expect(lines[7]!.text).toContain("#3 $ c");
-    expect(lines[8]!.text).toContain("gamma gamma gamma");
-    expect(lines[9]).toMatchObject({ text: `│${" ".repeat(38)}│`, card: true, border: "green" });
+    expect(lines[0]).toMatchObject({ text: "▲ 12 rows above — scroll down".padEnd(40), dim: true, card: false });
+    expect(lines[2]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" });
+    expect(lines[3]).toMatchObject({ text: " ".repeat(40), card: false });
+    expect(lines[4]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" });
+    expect(lines[6]).toMatchObject({ dim: true, card: true });
+    expect(lines[6]!.text).toContain("#3 $ c");
+    expect(lines[7]!.text).toContain("gamma gamma gamma");
+    expect(lines[9]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "green" });
   });
 
-  it("keeps the newest card's header on screen when pinned to the bottom", () => {
-    // scrollTop null on an overflowing stack used to blank the whole pane on
-    // press (marker + empty rows). Pinned view anchors at the first visible
-    // card's content offset (7): card 1 fully, then card 2's top border.
+  it("pins to the true bottom instead of snapping to the first visible card", () => {
+    // scrollTop null resolves to max 12, not the offset of the first visible
+    // card (7). The newest card's bottom border is therefore the last row.
     const lines = buildScreenLines(THREE, null, 10, 40);
     expect(lines).toHaveLength(10);
-    expect(lines[0]).toMatchObject({ text: "▲ 7 rows above — scroll down".padEnd(40), dim: true, card: false });
-    expect(lines[2]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "red" }); // card 1 top border
-    expect(lines[4]).toMatchObject({ text: `│ #2 $ b${" ".repeat(30)} │`, dim: true, card: true }); // card 1 header
-    expect(lines[7]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" }); // card 1 bottom border
-    expect(lines[8]).toMatchObject({ text: " ".repeat(40), card: false }); // gap
-    expect(lines[9]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" }); // card 2 top border
+    expect(lines[0]).toMatchObject({ text: "▲ 12 rows above — scroll down".padEnd(40), dim: true, card: false });
+    expect(lines[2]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" });
+    expect(lines[3]).toMatchObject({ text: " ".repeat(40), card: false });
+    expect(lines[4]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" });
+    expect(lines[6]!.text).toContain("#3 $ c");
+    expect(lines[7]!.text).toContain("gamma gamma gamma");
+    expect(lines[9]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "green" });
+  });
+
+  it("shows the bottom of a tall newest card when pinned", () => {
+    // A single card taller than the viewport must not re-snap to its top:
+    // the pinned window starts inside the card and ends at its bottom border.
+    const tall = { id: 1, command: "tall", output: "a".repeat(60), ok: true } satisfies ResultEntry;
+    const lines = buildScreenLines([tall], null, 8, 20);
+    expect(lines).toHaveLength(8);
+    expect(lines[0]!.text).toContain("▲ 3 rows above");
+    expect(lines[1]).toMatchObject({ card: false, text: " ".repeat(20) });
+    expect(lines[2]!.text).toContain("aaaaaaaa");
+    expect(lines[6]).toMatchObject({ text: "│                  │", card: true });
+    expect(lines[7]).toMatchObject({ text: `╰${"─".repeat(18)}╯`, card: true });
+    expect(lines.some((line) => line.text.includes("#1 $ tall"))).toBe(false);
   });
 });
 

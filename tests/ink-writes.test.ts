@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { PassThrough, Readable } from "node:stream";
 import { createRequire } from "node:module";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  encodeOsc52,
+  type ClipboardResult,
+  type ClipboardStdout,
+} from "../src/tui/clipboard.ts";
 
 // chalk resolves its color-support level at import time (it checks the real
 // process.stdout TTY); without FORCE_COLOR the styles are stripped and the
@@ -16,6 +21,17 @@ process.env.FORCE_COLOR = "1";
 const { render } = await import("ink");
 const { App } = await import("../src/tui/app.ts");
 const { TUI_RENDER_OPTIONS } = await import("../src/tui/index.ts");
+
+type TestClipboardWriter = (
+  text: string,
+  stdout: ClipboardStdout,
+) => Promise<ClipboardResult>;
+
+/** Existing drag tests intentionally exercise the OSC 52 branch on every OS. */
+const writeOsc52: TestClipboardWriter = async (text, stdout) => {
+  stdout.write(encodeOsc52(text));
+  return "osc52";
+};
 
 /**
  * Fake raw-mode TTY stdin for Ink: Ink's internal App reads via 'readable'
@@ -50,12 +66,14 @@ interface TuiHarness {
   emitMouse(seq: string): void;
   /** All stdout bytes captured so far. */
   text(): string;
+  /** Resize the fake terminal and notify Ink's window-size listener. */
+  resize(rows: number, cols: number): void;
   wait(ms?: number): Promise<void>;
   unmount(): void;
 }
 
 /** Live (renderToString-less) harness: mounts the real App on fake streams. */
-async function mountTui(): Promise<TuiHarness> {
+async function mountTui(clipboardWriter: TestClipboardWriter = writeOsc52): Promise<TuiHarness> {
   // Redirect ~/.chemengine writes into a throwaway dir (persist.ts reads
   // homedir() at call time, so patching the CJS exports works via the live
   // ESM->CJS getter).
@@ -79,6 +97,7 @@ async function mountTui(): Promise<TuiHarness> {
     createElement(App, {
       config: { resultLimit: 10, bannerOn: true, guideOn: true },
       historySeed: [],
+      clipboardWriter,
       testEmitMouse: (emit) => {
         emitMouse = emit;
       },
@@ -102,6 +121,11 @@ async function mountTui(): Promise<TuiHarness> {
     },
     emitMouse,
     text: () => chunks.join(""),
+    resize(nextRows, nextCols) {
+      (stdout as unknown as { rows: number }).rows = nextRows;
+      (stdout as unknown as { columns: number }).columns = nextCols;
+      stdout.emit("resize");
+    },
     wait,
     unmount() {
       inst.unmount();
@@ -207,8 +231,8 @@ describe("TUI frame writes (Ink renderer)", () => {
       const decoded = Buffer.from(osc![1]!, "base64").toString("utf8");
       expect(decoded).toContain("Oxygen");
       expect(decoded).toContain("element O");
-      // The "copied N chars" toast shows after the release.
-      expect(out.slice(release)).toContain("copied");
+      // The toast names the method the writer actually confirmed.
+      expect(out.slice(release)).toContain("terminal clipboard");
 
       // Phase 2 — Esc mid-drag clears the highlight; the release then copies
       // nothing (the selection is gone, so no second OSC 52).
@@ -228,12 +252,44 @@ describe("TUI frame writes (Ink renderer)", () => {
     }
   });
 
+  it.each(["native", "file"] as const)(
+    "reports the confirmed %s clipboard method at app level",
+    async (method) => {
+      const writer = vi.fn(async (_text: string, _stdout: ClipboardStdout) => method);
+      const tui = await mountTui(writer);
+      try {
+        for (const ch of "element O") {
+          tui.push(ch);
+          await tui.wait(40);
+        }
+        tui.push("\r");
+        await tui.wait(250);
+
+        tui.emitMouse("\u001b[<0;8;9M");
+        await tui.wait(80);
+        tui.emitMouse("\u001b[<32;17;10M");
+        await tui.wait(80);
+        tui.emitMouse("\u001b[<0;17;10m");
+        await tui.wait(180);
+
+        expect(writer).toHaveBeenCalledTimes(1);
+        expect(writer.mock.calls[0]?.[0]).toContain("Oxygen");
+        const releaseOutput = tui.text();
+        expect(releaseOutput).toContain(
+          method === "native" ? "native clipboard" : "last-selection.txt",
+        );
+        expect(releaseOutput).not.toMatch(/\x1b\]52;c;/);
+      } finally {
+        tui.unmount();
+      }
+    },
+  );
+
   it("keeps scrolled and bottom-pinned multi-card drags incremental, copying real cards", { timeout: 30000 }, async () => {
     const tui = await mountTui();
     const markerRows = () => {
       // Scan the CURRENT frame only: the accumulated buffer contains every
-      // historical marker line (7 → 14 → 21 → 28 as cards were submitted), so
-      // the LAST occurrence is the on-screen marker.
+      // historical marker line, so the LAST occurrence is the on-screen marker.
       const all = [...tui.text().matchAll(/▲ (\d+) rows above/g)];
       return all.length ? Number(all[all.length - 1]![1]) : null;
     };
@@ -251,33 +307,33 @@ describe("TUI frame writes (Ink renderer)", () => {
         await tui.wait(250);
       }
 
-      // Pane-local (row, col) → terminal (col+2, row+7): press on local (2,6),
-      // extend down to (5, 29). The selection box rows 2-5 always covers a
-      // card header ("#N $ element X"), whatever the exact per-card heights.
-      const dragAndCopy = async (): Promise<number> => {
+      // Pane-local (row, col) → terminal (col+2, row+7). The bottom-pinned
+      // window puts a card header at local row 2; after PgUp the window moves,
+      // so phase 2 deliberately targets the header now visible at local row 7.
+      const dragAndCopy = async (firstRow: number, lastRow: number): Promise<number> => {
         const press = tui.text().length;
-        tui.emitMouse("\u001b[<0;8;9M");
+        tui.emitMouse(`\u001b[<0;8;${firstRow + 7}M`);
         await tui.wait();
         const pressDelta = tui.text().length - press;
         expect(pressDelta, `press wrote ${pressDelta} B`).toBeGreaterThan(0);
         expect(pressDelta, `press wrote ${pressDelta} B`).toBeLessThan(400);
 
         const m1 = tui.text().length;
-        tui.emitMouse("\u001b[<32;21;11M"); // rows 2-4 × cols 6-19
+        tui.emitMouse(`\u001b[<32;21;${firstRow + 9}M`); // cols 6-19, two rows down
         await tui.wait();
         const m1Delta = tui.text().length - m1;
         expect(m1Delta, `motion wrote ${m1Delta} B`).toBeGreaterThan(0);
         expect(m1Delta, `motion wrote ${m1Delta} B`).toBeLessThan(1200);
 
         const m2 = tui.text().length;
-        tui.emitMouse("\u001b[<32;31;12M"); // rows 2-5 × cols 6-29
+        tui.emitMouse(`\u001b[<32;31;${lastRow + 7}M`); // cols 6-29
         await tui.wait();
         const m2Delta = tui.text().length - m2;
         expect(m2Delta, `motion wrote ${m2Delta} B`).toBeGreaterThan(0);
         expect(m2Delta, `motion wrote ${m2Delta} B`).toBeLessThan(1200);
 
         const release = tui.text().length;
-        tui.emitMouse("\u001b[<0;31;12m"); // release → finish → copy
+        tui.emitMouse(`\u001b[<0;31;${lastRow + 7}m`); // release → finish → copy
         await tui.wait(200);
         const releaseDelta = tui.text().length - release;
         expect(releaseDelta, `release wrote ${releaseDelta} B`).toBeGreaterThan(0);
@@ -292,9 +348,18 @@ describe("TUI frame writes (Ink renderer)", () => {
         return tui.text().match(/\x1b\]52;c;/g)?.length ?? 0;
       };
 
+      // Wheel steps use the same marker-aware max: one notch moves three rows,
+      // and scrolling back to the bottom restores the pinned sentinel.
+      tui.emitMouse("\u001b[<64;1;1M"); // wheel up
+      await tui.wait(200);
+      expect(markerRows(), "wheel up moves three rows").toBe(27);
+      tui.emitMouse("\u001b[<65;1;1M"); // wheel down
+      await tui.wait(200);
+      expect(markerRows(), "wheel down returns to the pinned bottom").toBe(30);
+
       // Phase 1 — bottom-pinned stack (scrollTop null, 6 cards): used to blank
       // on press; must copy the newest cards' real headers.
-      const copiesAfterPhase1 = await dragAndCopy();
+      const copiesAfterPhase1 = await dragAndCopy(2, 5);
       expect(copiesAfterPhase1).toBeGreaterThan(0);
 
       // Phase 2 — PgUp onto a mid-stack window, then drag again. The marker
@@ -309,8 +374,24 @@ describe("TUI frame writes (Ink renderer)", () => {
       expect(scrolledRowMark!).toBeLessThan(bottomRowMark!);
 
       const copiesBeforePhase2 = tui.text().match(/\x1b\]52;c;/g)?.length ?? 0;
-      const copiesAfterPhase2 = await dragAndCopy();
+      const copiesAfterPhase2 = await dragAndCopy(7, 10);
       expect(copiesAfterPhase2).toBe(copiesBeforePhase2 + 1);
+
+      // PgDn pages back down to the true bottom and re-pins the sentinel.
+      tui.push("\u001b[6~"); // PgDn → scroll-down
+      await tui.wait(200);
+      expect(markerRows(), "PgDn returns to the bottom-pinned window").toBe(30);
+
+      // Leave an explicit offset behind, then resize: the marker-aware maximum
+      // shrinks from 30 to 14 rows, so the stale 27-row offset must clamp and
+      // re-pin instead of leaving the pane past the end of the stack.
+      tui.emitMouse("\u001b[<64;1;1M"); // wheel up → explicit offset
+      await tui.wait(200);
+      expect(markerRows(), "wheel up leaves an explicit offset").toBe(27);
+      tui.resize(40, 160);
+      await tui.wait(250);
+      expect(markerRows(), "resize clamps and re-pins the scroll offset").toBe(14);
+      expect(tui.text()).toContain("chem>");
     } finally {
       tui.unmount();
     }

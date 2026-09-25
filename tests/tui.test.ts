@@ -144,6 +144,29 @@ describe("TUI reducer", () => {
     expect(s.scrollTop).toBe(8);
   });
 
+  it("clamps an existing offset after resize and re-pins the bottom", () => {
+    let s = initialState();
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+
+    // A larger content window leaves a valid offset untouched.
+    s = reducer(s, { type: "clamp-scroll", max: 20 });
+    expect(s.scrollTop).toBe(12);
+
+    // A smaller window clamps the stale offset to its new bottom, which is
+    // represented by the autoscroll sentinel rather than a redundant number.
+    s = reducer(s, { type: "clamp-scroll", max: 8 });
+    expect(s.scrollTop).toBeNull();
+
+    s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
+    expect(s.scrollTop).toBe(12);
+    s = reducer(s, { type: "clamp-scroll", max: 5 });
+    expect(s.scrollTop).toBeNull();
+
+    // A pinned viewport stays pinned when the geometry changes.
+    expect(reducer({ ...s, scrollTop: null }, { type: "clamp-scroll", max: 0 }).scrollTop).toBeNull();
+  });
+
   it("re-pins to autoscroll (null) when scrolling reaches the bottom", () => {
     let s = initialState();
     s = reducer(s, { type: "scroll-up", max: 20, page: 8 });
@@ -248,6 +271,7 @@ describe("TUI reducer", () => {
       { type: "scroll-down", max: 20, page: 8 },
       { type: "wheel-up", max: 20, step: 3 },
       { type: "wheel-down", max: 20, step: 3 },
+      { type: "clamp-scroll", max: 20 },
       { type: "toggle-guide" },
     ];
     for (const action of cases) {
@@ -388,7 +412,7 @@ describe("TUI layout math", () => {
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.4", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -399,12 +423,12 @@ describe("TUI guide content", () => {
     expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.4");
+    expect(engine).toContain("v0.2.5");
   });
 
   it("keeps every guide line within the narrowest panel inner width", () => {
     // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
-    const sections = guideSections({ version: "0.2.4", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 });
     for (const s of sections) {
       for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
     }

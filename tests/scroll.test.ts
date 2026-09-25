@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  MARKER_ROWS,
   WHEEL_STEP,
   cardRows,
   clampScroll,
+  normalizeScrollTop,
   pageStep,
   resultHeights,
+  scrollGeometry,
   scrollMax,
   visibleRange,
   wrappedLines,
@@ -44,9 +47,29 @@ describe("TUI scroll math", () => {
   });
 
   it("computes the farthest scroll offset that still shows the newest content", () => {
-    expect(scrollMax([7, 7, 6], 10)).toBe(10); // 20 rows - 10 viewport
+    // 20 content rows − (10 viewport − 2 marker/spacer rows) = 12.
+    expect(scrollMax([7, 7, 6], 10)).toBe(12);
     expect(scrollMax([3], 5)).toBe(0); // content fits → no scroll
     expect(scrollMax([], 5)).toBe(0);
+  });
+
+  it("resolves one geometry for marker space, the true bottom, and the visible range", () => {
+    const pinned = scrollGeometry([7, 7, 6], 10, null);
+    expect(pinned).toMatchObject({
+      totalRows: 20,
+      max: 12,
+      top: 12,
+      markerRows: MARKER_ROWS,
+      contentRows: 8,
+      range: { start: 1, end: 3 },
+    });
+
+    const top = scrollGeometry([7, 7, 6], 10, 0);
+    expect(top).toMatchObject({ max: 12, top: 0, markerRows: 0, contentRows: 10 });
+    expect(top.range.start).toBe(0);
+
+    const clamped = scrollGeometry([7, 7, 6], 10, 99);
+    expect(clamped).toMatchObject({ top: 12, markerRows: MARKER_ROWS });
   });
 
   it("clamps scroll offsets into [0, max]", () => {
@@ -54,6 +77,14 @@ describe("TUI scroll math", () => {
     expect(clampScroll(20, 13)).toBe(13);
     expect(clampScroll(5, 13)).toBe(5);
     expect(clampScroll(9, 0)).toBe(0);
+  });
+
+  it("normalizes explicit offsets and re-pins the bottom sentinel", () => {
+    expect(normalizeScrollTop(5, 12)).toBe(5);
+    expect(normalizeScrollTop(12, 12)).toBeNull();
+    expect(normalizeScrollTop(20, 12)).toBeNull();
+    expect(normalizeScrollTop(-2, 12)).toBe(0);
+    expect(normalizeScrollTop(null, 12)).toBeNull();
   });
 
   it("finds cards intersecting the visible row window", () => {

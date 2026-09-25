@@ -1,4 +1,12 @@
 import wrapAnsi from "wrap-ansi";
+import {
+  blankDisplayLine,
+  joinDisplayLines,
+  makeDisplayLine,
+  padDisplayLine,
+  truncateDisplayLine,
+  type DisplayLine,
+} from "./display.ts";
 import type { ResultEntry } from "./state.ts";
 
 /**
@@ -12,6 +20,9 @@ import type { ResultEntry } from "./state.ts";
 
 /** Rows a single wheel notch scrolls. */
 export const WHEEL_STEP = 3;
+
+/** Rows reserved above scrolled content: the marker text plus its spacer. */
+export const MARKER_ROWS = 2;
 
 /**
  * Card chrome rows beyond the wrapped header/body: 2 borders + 2 paddingY.
@@ -52,12 +63,23 @@ export function resultHeights(results: readonly ResultEntry[], width: number): n
 
 /** Farthest scroll offset (rows) that still shows the newest content. */
 export function scrollMax(heights: readonly number[], viewportRows: number): number {
-  const total = heights.reduce((sum, h) => sum + h, 0);
-  return Math.max(0, total - viewportRows);
+  return scrollGeometry(heights, viewportRows, null).max;
 }
 
 export function clampScroll(top: number, max: number): number {
   return Math.min(Math.max(0, top), max);
+}
+
+/**
+ * Normalize a scroll offset against the current maximum. `null` is the
+ * bottom-pinned autoscroll sentinel; an offset that reaches the bottom also
+ * re-pins to `null` so state and rendering use one representation of the pin.
+ */
+export function normalizeScrollTop(top: number | null, max: number): number | null {
+  if (top === null) return null;
+  const bottom = Math.max(0, max);
+  const next = clampScroll(top, bottom);
+  return next >= bottom ? null : next;
 }
 
 export interface VisibleRange {
@@ -65,6 +87,56 @@ export interface VisibleRange {
   start: number;
   /** One past the last card at least partially inside the window. */
   end: number;
+}
+
+/**
+ * One resolved scroll window. Every consumer (max calculation, reducer
+ * clamping, card selection, and screen-line rendering) derives from this
+ * shape, so marker space cannot drift away from the content window.
+ */
+export interface ScrollGeometry {
+  /** Total content rows, including inter-card gap rows. */
+  totalRows: number;
+  /** Maximum valid content offset for this viewport. */
+  max: number;
+  /** Effective content offset after resolving `null` and clamping. */
+  top: number;
+  /** Marker rows actually shown above the content (0 at the very top). */
+  markerRows: number;
+  /** Content rows visible after marker rows are reserved. */
+  contentRows: number;
+  /** Cards intersecting the effective content window. */
+  range: VisibleRange;
+}
+
+/**
+ * Resolve a requested offset into the single geometry used by rendering and
+ * scrolling. When content overflows the viewport, any non-zero window reserves
+ * the marker and its spacer, so the true bottom is `totalRows` rather than a
+ * card's first row.
+ */
+export function scrollGeometry(
+  heights: readonly number[],
+  viewportRows: number,
+  scrollTop: number | null,
+): ScrollGeometry {
+  const rowCount = Math.max(0, Math.trunc(viewportRows));
+  const totalRows = heights.reduce((sum, h) => sum + h, 0);
+  const overflows = totalRows > rowCount;
+  // Tiny viewports cannot show a marker and content together; leave the marker
+  // off there rather than spending the whole viewport on chrome.
+  const reservedMarkerRows = overflows && rowCount > MARKER_ROWS ? MARKER_ROWS : 0;
+  const max = overflows
+    ? Math.max(0, totalRows - Math.max(0, rowCount - reservedMarkerRows))
+    : 0;
+  const top = scrollTop === null ? max : clampScroll(scrollTop, max);
+  const markerRows = top > 0 ? reservedMarkerRows : 0;
+  const contentRows = Math.max(0, rowCount - markerRows);
+  const range =
+    contentRows > 0
+      ? visibleRange(top, heights, contentRows)
+      : { start: heights.length, end: heights.length };
+  return { totalRows, max, top, markerRows, contentRows, range };
 }
 
 /**
@@ -97,14 +169,16 @@ export function pageStep(viewportRows: number): number {
 /**
  * One rendered row of the results region, in *viewport-local* coordinates
  * (row 0 = the top of the center region, regardless of banner/info chrome).
- * `text` is the raw row content with no ANSI codes — the single source of
- * truth for both selection extraction and the inverse-highlight renderer.
+ * `text` is plain visible content with no ANSI codes; `cells` carries the
+ * display-column metadata used by the renderer and selection extractor.
  */
 export interface PaneLine {
   /** 0-based row within the results viewport. */
   row: number;
-  /** Raw text on the row (borders/padding/gaps included, padded to `width`). */
+  /** Plain visible text (borders/padding/gaps included), padded by display columns. */
   text: string;
+  /** Optional normalized cells; older test/manual lines may omit them. */
+  cells?: readonly import("./display.ts").DisplayCell[];
   /** Card border color when this row belongs to a result card. */
   border?: "green" | "red";
   /** Dim styling (scrolled-off marker row, or a card header row). */
@@ -117,13 +191,15 @@ export interface PaneLine {
 const ROUND = { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" };
 
 /** Text wrapped exactly like Ink's Text default (hard wrap, no trim). */
-function wrapLines(text: string, inner: number): string[] {
-  return wrapAnsi(text, Math.max(1, inner), { trim: false, hard: true }).split("\n");
+function wrapLines(text: string, inner: number): DisplayLine[] {
+  return wrapAnsi(text, Math.max(1, inner), { trim: false, hard: true })
+    .split("\n")
+    .map((line) => makeDisplayLine(line, Math.max(1, inner)));
 }
 
-/** One card row: raw text plus styling flags for the line model. */
+/** One card row: normalized display cells plus styling flags for the line model. */
 interface CardRow {
-  text: string;
+  line: DisplayLine;
   /** Header rows render dim. */
   dim?: boolean;
 }
@@ -132,15 +208,25 @@ interface CardRow {
 function cardTextLines(entry: ResultEntry, width: number): CardRow[] {
   const w = Math.max(1, width);
   const inner = Math.max(1, w - 4); // width - 2 borders - 2 paddingX
-  const pad = " ".repeat(inner);
-  const mid = (t: string): string => `${ROUND.v} ${t.padEnd(inner)} ${ROUND.v}`;
+  const pad = blankDisplayLine(inner);
+  const mid = (content: DisplayLine): DisplayLine =>
+    joinDisplayLines(
+      [
+        makeDisplayLine(ROUND.v, 1),
+        blankDisplayLine(1),
+        padDisplayLine(content, inner),
+        blankDisplayLine(1),
+        makeDisplayLine(ROUND.v, 1),
+      ],
+      w,
+    );
   return [
-    { text: `${ROUND.tl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.tr}` },
-    { text: mid(pad) },
-    ...wrapLines(`#${entry.id} $ ${entry.command}`, inner).map((t) => ({ text: mid(t), dim: true })),
-    ...wrapLines(entry.output, inner).map((t) => ({ text: mid(t) })),
-    { text: mid(pad) },
-    { text: `${ROUND.bl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.br}` },
+    { line: makeDisplayLine(`${ROUND.tl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.tr}`, w) },
+    { line: mid(pad) },
+    ...wrapLines(`#${entry.id} $ ${entry.command}`, inner).map((line) => ({ line: mid(line), dim: true })),
+    ...wrapLines(entry.output, inner).map((line) => ({ line: mid(line) })),
+    { line: mid(pad) },
+    { line: makeDisplayLine(`${ROUND.bl}${ROUND.h.repeat(Math.max(0, w - 2))}${ROUND.br}`, w) },
   ];
 }
 
@@ -159,61 +245,55 @@ export function buildScreenLines(
   viewportRows: number,
   width: number,
 ): PaneLine[] {
-  const blank = (w: number): string => " ".repeat(w);
-  if (results.length === 0 || viewportRows <= 0) {
-    return Array.from({ length: viewportRows }, (_, row) => ({ row, text: blank(Math.max(0, width)), card: false }));
+  const rowCount = Math.max(0, Math.trunc(viewportRows));
+  const lineWidth = Math.max(0, Math.trunc(width));
+  const blank = (w: number): DisplayLine => blankDisplayLine(Math.max(0, w));
+  if (results.length === 0 || rowCount <= 0) {
+    return Array.from({ length: rowCount }, (_, row) => {
+      const line = blank(lineWidth);
+      return { row, text: line.text, cells: line.cells, card: false };
+    });
   }
-  const markerRows = scrollTop !== null && scrollTop > 0 ? 1 : 0;
-  const cardViewport = Math.max(1, viewportRows - markerRows);
-  const heights = resultHeights(results, Math.max(1, width));
-  const max = scrollMax(heights, cardViewport);
-  const rawTop = scrollTop === null ? max : clampScroll(scrollTop, max);
-  const range = visibleRange(rawTop, heights, cardViewport);
-  // Pinned to the newest output (scrollTop null): anchor the window at the
-  // first visible card's content offset so cards render from their very first
-  // row — preserving the bottom-anchored autoscroll view where the newest
-  // card's header stays on screen. A scrolled offset keeps the exact
-  // content-row window, so the "▲ N rows above" marker count is truthful.
-  const top =
-    scrollTop === null && range.start < heights.length
-      ? heights.slice(0, range.start).reduce((sum, h) => sum + h, 0)
-      : rawTop;
+  const heights = resultHeights(results, Math.max(1, lineWidth));
+  const geometry = scrollGeometry(heights, rowCount, scrollTop);
+  const { markerRows, range, top } = geometry;
 
   const lines: PaneLine[] = [];
-  const push = (row: number, text: string, extra: Partial<PaneLine> = {}): void => {
-    lines.push({ row, text, card: extra.card ?? false, ...extra });
+  const push = (row: number, line: DisplayLine, extra: Omit<Partial<PaneLine>, "row" | "text" | "cells"> = {}): void => {
+    lines.push({ row, text: line.text, cells: line.cells, card: extra.card ?? false, ...extra });
   };
 
-  if (top > 0) {
+  if (markerRows > 0) {
     // Ink's wrap:"truncate" reserves the last column for the ellipsis glyph.
     const markerText = `▲ ${top} rows above — scroll down`;
-    const marker = markerText.length > width ? `${markerText.slice(0, Math.max(1, width - 1))}…` : markerText;
-    push(0, marker.padEnd(width), { dim: true });
-    push(1, blank(width));
+    push(0, truncateDisplayLine(markerText, lineWidth), { dim: true });
+    push(1, blank(lineWidth));
   }
   // Emit the visible cards, starting `top` rows into the content so the window
-  // [top, top+cardViewport) matches the rows actually on screen. `cum` tracks
+  // [top, top + contentRows) matches the rows actually on screen. `cum` tracks
   // each card's content-row offset in heights space (trailing gap included).
   // The loop only visits cards ≥ range.start, so `cum` must begin at that
   // card's offset (the sum of every row before it) — counting from 0 made
   // every mid-stack window skip the wrong cards (blank rows or newer cards
   // pulled forward) whenever the first card was scrolled off-screen.
   let cum = heights.slice(0, range.start).reduce((sum, h) => sum + h, 0);
-  for (let i = range.start; i < range.end; i++) {
+  for (let i = range.start; i < range.end && lines.length < rowCount; i++) {
     const entry = results[i]!;
     const border = entry.ok ? "green" : "red";
-    const cardLines = cardTextLines(entry, width);
+    const cardLines = cardTextLines(entry, lineWidth);
     const gapRow = i < results.length - 1 ? 1 : 0;
     const skip = Math.max(0, Math.min(top - cum, cardLines.length));
-    for (let k = skip; k < cardLines.length; k++) {
-      push(lines.length, cardLines[k]!.text, { border, card: true, ...(cardLines[k]!.dim ? { dim: true } : {}) });
-      if (lines.length >= viewportRows) break;
+    for (let k = skip; k < cardLines.length && lines.length < rowCount; k++) {
+      const cardLine = cardLines[k]!;
+      push(lines.length, cardLine.line, { border, card: true, ...(cardLine.dim ? { dim: true } : {}) });
     }
-    if (gapRow) push(lines.length, blank(width));
-    if (lines.length >= viewportRows) break;
+    if (gapRow && lines.length < rowCount) push(lines.length, blank(lineWidth));
     cum += cardLines.length + gapRow;
   }
-  const out = lines.slice(0, viewportRows);
-  while (out.length < viewportRows) out.push({ row: out.length, text: blank(width), card: false });
+  const out = lines.slice(0, rowCount);
+  while (out.length < rowCount) {
+    const line = blank(lineWidth);
+    out.push({ row: out.length, text: line.text, cells: line.cells, card: false });
+  }
   return out.map((l, i) => ({ ...l, row: i }));
 }

@@ -21,7 +21,28 @@ import { Palette } from "./palette.ts";
 import { ResultPane } from "./resultpane.ts";
 import { Spinner } from "./spinner.ts";
 import { extendSelection, extractSelectionText, hasArea, startSelection, type Selection } from "./select.ts";
-import { writeClipboard } from "./clipboard.ts";
+import {
+  writeClipboard,
+  type ClipboardResult,
+  type ClipboardStdout,
+} from "./clipboard.ts";
+
+export type ClipboardWriter = (
+  text: string,
+  stdout: ClipboardStdout,
+) => Promise<ClipboardResult>;
+
+/** Human-readable toast for a clipboard method confirmed by the writer. */
+export function clipboardStatus(method: Exclude<ClipboardResult, "none">, length: number): string {
+  switch (method) {
+    case "native":
+      return `copied ${length} chars → native clipboard`;
+    case "osc52":
+      return `copied ${length} chars → terminal clipboard`;
+    case "file":
+      return `copied ${length} chars → last-selection.txt`;
+  }
+}
 
 export interface AppProps {
   config?: TuiConfig;
@@ -31,9 +52,11 @@ export interface AppProps {
    * (headless drag testing — see MouseBridge's `emitToParser`).
    */
   testEmitMouse?: (emit: (seq: string) => void) => void;
+  /** Injectable clipboard implementation for deterministic app-level tests. */
+  clipboardWriter?: ClipboardWriter;
 }
 
-export function App({ config, historySeed, testEmitMouse }: AppProps) {
+export function App({ config, historySeed, testEmitMouse, clipboardWriter }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const { rows, columns } = useWindowSize();
@@ -59,6 +82,8 @@ export function App({ config, historySeed, testEmitMouse }: AppProps) {
   geomRef.current = lay;
   const stdoutRef = useRef(stdout);
   stdoutRef.current = stdout;
+  const clipboardRef = useRef<ClipboardWriter>(clipboardWriter ?? writeClipboard);
+  clipboardRef.current = clipboardWriter ?? writeClipboard;
 
   // Persist command history and the guide preference when they change.
   useEffect(() => {
@@ -83,6 +108,13 @@ export function App({ config, historySeed, testEmitMouse }: AppProps) {
 
   // Scroll extent of the current result stack, recomputed every render.
   const scrollMaxRows = scrollMax(resultHeights(state.results, lay.resultWidth), lay.viewportRows);
+
+  // A resize can change the content width and therefore the wrapped card
+  // heights. Normalize the stored offset whenever that extent changes; the
+  // reducer keeps valid offsets, clamps stale ones, and re-pins the bottom.
+  useEffect(() => {
+    dispatch({ type: "clamp-scroll", max: scrollMaxRows });
+  }, [scrollMaxRows, dispatch]);
 
   // Mouse intents need the freshest scroll max without re-registering the
   // stdin listener; the bridge reads through a ref updated each render.
@@ -125,13 +157,16 @@ export function App({ config, historySeed, testEmitMouse }: AppProps) {
           sel,
         );
         dispatch({ type: "select-cancel" }); // highlight clears with the release
-        const mode = writeClipboard(copied, stdoutRef.current);
-        if (mode === "none") return;
-        setStatus(
-          mode === "file"
-            ? `copied ${copied.length} chars → last-selection.txt`
-            : `copied ${copied.length} chars`,
-        );
+        void (async () => {
+          let method: ClipboardResult;
+          try {
+            method = await clipboardRef.current(copied, stdoutRef.current);
+          } catch {
+            return;
+          }
+          if (method === "none") return;
+          setStatus(clipboardStatus(method, copied.length));
+        })();
         return;
       }
       default:

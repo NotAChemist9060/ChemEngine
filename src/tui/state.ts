@@ -1,4 +1,5 @@
 import { lastToken } from "./completions.ts";
+import { normalizeScrollTop } from "./scroll.ts";
 import { extendSelection, startSelection, type Selection } from "./select.ts";
 
 export interface TuiConfig {
@@ -36,6 +37,11 @@ export interface TuiState {
    * Row offset from the top of the result stack: 0 = oldest at the top.
    * null = pinned to the newest output — the autoscroll position, restored
    * whenever a command is submitted (further results push the view to bottom).
+   *
+   * `max` is the marker-aware maximum from `scrollGeometry` (see scroll.ts), so
+   * an offset equal to `max` is the true bottom of the stack, not the top of the
+   * last card. Offsets are normalized through `clamp-scroll` whenever the
+   * viewport geometry changes.
    */
   scrollTop: number | null;
   /**
@@ -89,6 +95,8 @@ export type TuiAction =
   | { type: "scroll-down"; max: number; page: number }
   | { type: "wheel-up"; max: number; step: number }
   | { type: "wheel-down"; max: number; step: number }
+  /** Re-normalize the offset against a new maximum (resize / re-wrap). */
+  | { type: "clamp-scroll"; max: number }
   | { type: "set-cursor"; index: number }
   | { type: "select-start"; row: number; col: number }
   | { type: "select-extend"; row: number; col: number }
@@ -111,7 +119,7 @@ function scrollBy(state: TuiState, delta: number, max: number): TuiState {
   const bottom = Math.max(0, max);
   const from = state.scrollTop === null ? bottom : state.scrollTop;
   const next = Math.min(Math.max(0, from + delta), bottom);
-  return { ...state, scrollTop: next >= bottom ? null : next, selection: null };
+  return { ...state, scrollTop: normalizeScrollTop(next, bottom), selection: null };
 }
 
 export function reducer(state: TuiState, action: TuiAction): TuiState {
@@ -184,6 +192,13 @@ export function reducer(state: TuiState, action: TuiAction): TuiState {
       return scrollBy(state, -Math.max(1, action.step), action.max);
     case "wheel-down":
       return scrollBy(state, +Math.max(1, action.step), action.max);
+    case "clamp-scroll": {
+      // Idempotent: return the same state when the offset is already valid so a
+      // geometry change that doesn't move the view costs no extra render.
+      const scrollTop = normalizeScrollTop(state.scrollTop, action.max);
+      if (scrollTop === state.scrollTop && state.selection === null) return state;
+      return { ...state, scrollTop, selection: null };
+    }
     case "set-cursor":
       return { ...state, cursor: Math.min(Math.max(0, action.index), state.input.length) };
     case "select-start":

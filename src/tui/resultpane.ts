@@ -1,9 +1,15 @@
 import { createElement } from "react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Text } from "ink";
 import { box } from "./el.ts";
-import { buildScreenLines } from "./scroll.ts";
-import { selectionCell, type Selection } from "./select.ts";
+import {
+  displayWidth,
+  makeDisplayLine,
+  type DisplayCell,
+  type DisplayStyle,
+} from "./display.ts";
+import { buildScreenLines, type PaneLine } from "./scroll.ts";
+import { normalizedBox, type Selection } from "./select.ts";
 import type { ResultEntry } from "./state.ts";
 
 export interface ResultPaneProps {
@@ -26,19 +32,57 @@ export interface ResultPaneProps {
 /** Box-drawn glyphs of the round border style — these carry the card's border color. */
 const BORDER_GLYPHS = new Set(["╭", "╮", "╰", "╯", "│", "─"]);
 
+type TextProps = ComponentProps<typeof Text>;
+
+function cellsFor(line: PaneLine): readonly DisplayCell[] {
+  return line.cells ?? makeDisplayLine(line.text, displayWidth(line.text)).cells;
+}
+
+function selectedCell(selection: Selection, row: number, cell: DisplayCell): boolean {
+  const box = normalizedBox(selection);
+  if (row < box.top || row > box.bottom) return false;
+  if (cell.width === 0) return cell.column >= box.left && cell.column <= box.right;
+  return cell.column <= box.right && cell.column + cell.width - 1 >= box.left;
+}
+
+function propsFor(line: PaneLine, cell: DisplayCell, selection: Selection | null): TextProps {
+  if (selection !== null && selectedCell(selection, line.row, cell)) {
+    return { inverse: true };
+  }
+
+  if (line.card && cell.width === 1 && BORDER_GLYPHS.has(cell.value) && line.border !== undefined) {
+    return { color: line.border };
+  }
+
+  const style: DisplayStyle = cell.style;
+  return {
+    ...(style.bold === true ? { bold: true } : {}),
+    ...(style.dimColor === true || line.dim === true ? { dimColor: true } : {}),
+    ...(style.italic === true ? { italic: true } : {}),
+    ...(style.underline === true ? { underline: true } : {}),
+    ...(style.strikethrough === true ? { strikethrough: true } : {}),
+    ...(style.inverse === true ? { inverse: true } : {}),
+    ...(style.color !== undefined ? { color: style.color } : {}),
+    ...(style.backgroundColor !== undefined ? { backgroundColor: style.backgroundColor } : {}),
+  };
+}
+
+function styleKey(props: TextProps): string {
+  return JSON.stringify(props);
+}
+
 /**
  * Screen-line render path: one `<Text>` per `buildScreenLines` row, split into
- * runs by per-cell style:
+ * runs by normalized display cells and their visible SGR state:
  *
  * - selected cells → flat `inverse` (the highlight is the background swap;
  *   no color/dim so it stays readable on any row);
  * - box border glyphs (`╭╮╰╯│─`) → the card's `border` color, never dim;
- * - everything else (padding, header/body text, marker) → `dim` on dim rows
- *   (headers, marker), otherwise default.
+ * - everything else retains the body styling parsed from its SGR sequences,
+ *   with the existing header/marker dim baseline.
  *
- * With no selection every cell takes the plain glyph/dim/default styling, which
- * is byte-identical to the pre-unification card-box path (guarded by the
- * screen-lines parity tests), so the pane renders identically idle or dragging.
+ * Because runs are coalesced by display cells rather than JavaScript string
+ * indexes, wide graphemes and combining clusters stay intact.
  */
 function renderGrid(
   results: readonly ResultEntry[],
@@ -49,37 +93,34 @@ function renderGrid(
 ): ReactNode {
   const lines = buildScreenLines(results, scrollTop, viewportRows, width);
   const rows: ReactNode[] = lines.map((line) => {
-    const styleOf = (i: number): { selected: boolean; glyph: boolean; dim: boolean } => {
-      const selected = selection !== null && selectionCell(selection, line.row, i);
-      return {
-        selected,
-        glyph: line.card ? BORDER_GLYPHS.has(line.text[i] ?? "") : false,
-        dim: line.dim === true && !selected,
-      };
-    };
     const spans: ReactNode[] = [];
-    let col = 0;
-    while (col < line.text.length) {
-      const st = styleOf(col);
-      let end = col + 1;
-      while (end < line.text.length) {
-        const s2 = styleOf(end);
-        if (s2.selected !== st.selected || s2.glyph !== st.glyph || s2.dim !== st.dim) break;
-        end++;
+    let runKey: string | undefined;
+    let runStart = 0;
+    let runText = "";
+    let runProps: TextProps = {};
+
+    const flush = (): void => {
+      if (runText === "") return;
+      spans.push(createElement(Text, { key: `c${runStart}`, ...runProps }, runText));
+      runText = "";
+    };
+
+    for (const cell of cellsFor(line)) {
+      const props = propsFor(line, cell, selection);
+      const key = styleKey(props);
+      if (runKey === undefined) {
+        runKey = key;
+        runStart = cell.column;
+        runProps = props;
+      } else if (key !== runKey) {
+        flush();
+        runKey = key;
+        runStart = cell.column;
+        runProps = props;
       }
-      const chunk = line.text.slice(col, end);
-      const key = `c${col}`;
-      if (st.selected) {
-        spans.push(createElement(Text, { key, inverse: true }, chunk));
-      } else if (st.glyph && line.border) {
-        spans.push(createElement(Text, { key, color: line.border }, chunk));
-      } else if (st.dim) {
-        spans.push(createElement(Text, { key, dimColor: true }, chunk));
-      } else {
-        spans.push(createElement(Text, { key }, chunk));
-      }
-      col = end;
+      runText += cell.value;
     }
+    flush();
     return createElement(Text, { key: `row${line.row}` }, ...spans);
   });
   return box({ flexDirection: "column", paddingX: 1 }, ...rows);
