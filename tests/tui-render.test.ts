@@ -149,11 +149,17 @@ describe("TUI presentation layer", () => {
     expect(out).not.toContain("beta");
   });
 
-  it("shows the scrolled-off marker with an exact row count", () => {
+  it("shows the scrolled-off marker with an exact, row-truthful window", () => {
     const out = render(createElement(ResultPane, { results: THREE_SHORT, scrollTop: 5, viewportRows: 6, width: 40 }));
+    // The window starts 5 rows into (three-short) card 1 ([7,7,6] heights):
+    // its bottom border, the inter-card gap, then card 2's top border and
+    // first padding row. Content scrolled past is never re-snapped back — the
+    // "▲ N rows above" count is the exact clip point.
     expect(out).toContain("▲ 5 rows above — scroll down");
-    expect(out).toContain("alpha");
-    expect(out).toContain("beta");
+    expect(out).toContain("╰"); // card 1 bottom border (row 5 of 7)
+    expect(out).toContain("╭"); // card 2 top border (window row 4)
+    expect(out).not.toContain("alpha"); // card 1 body is above the window
+    expect(out).not.toContain("beta"); // card 2 body is below the clip
     expect(out).not.toContain("gamma");
   });
 

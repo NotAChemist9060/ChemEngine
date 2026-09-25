@@ -109,6 +109,47 @@ describe("TUI screen-line model — marker rows and blank fill", () => {
   });
 });
 
+describe("TUI screen-line model — windows past the first card (range.start > 0)", () => {
+  // Three cards at width 40 → heights [7, 7, 6] (20 rows incl. gaps). With any
+  // viewport ≤ 10 every scrolled window starts mid-stack — the exact path that
+  // blanked the pane before the cum-seed fix.
+  const THREE = [
+    OK,
+    BAD,
+    { id: 3, command: "c", output: "gamma gamma gamma", ok: true },
+  ] as const;
+
+  it("renders the true window when scrolled past the first card", () => {
+    // cardViewport 9 (marker), max = 20 - 9 = 11; scrollTop 12 clamps to 11.
+    // Window [11, 20): card 1 rows 4-5 (pad + bottom border), gap, card 2 full.
+    const lines = buildScreenLines(THREE, 12, 10, 40);
+    expect(lines).toHaveLength(10);
+    expect(lines[0]).toMatchObject({ text: "▲ 11 rows above — scroll down".padEnd(40), dim: true, card: false });
+    expect(lines[2]).toMatchObject({ text: `│${" ".repeat(38)}│`, card: true, border: "red" }); // card 1 pad
+    expect(lines[3]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" }); // card 1 bottom border
+    expect(lines[4]).toMatchObject({ text: " ".repeat(40), card: false }); // gap
+    expect(lines[5]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" }); // card 2 top
+    expect(lines[7]).toMatchObject({ dim: true, card: true }); // card 2 header
+    expect(lines[7]!.text).toContain("#3 $ c");
+    expect(lines[8]!.text).toContain("gamma gamma gamma");
+    expect(lines[9]).toMatchObject({ text: `│${" ".repeat(38)}│`, card: true, border: "green" });
+  });
+
+  it("keeps the newest card's header on screen when pinned to the bottom", () => {
+    // scrollTop null on an overflowing stack used to blank the whole pane on
+    // press (marker + empty rows). Pinned view anchors at the first visible
+    // card's content offset (7): card 1 fully, then card 2's top border.
+    const lines = buildScreenLines(THREE, null, 10, 40);
+    expect(lines).toHaveLength(10);
+    expect(lines[0]).toMatchObject({ text: "▲ 7 rows above — scroll down".padEnd(40), dim: true, card: false });
+    expect(lines[2]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "red" }); // card 1 top border
+    expect(lines[4]).toMatchObject({ text: `│ #2 $ b${" ".repeat(30)} │`, dim: true, card: true }); // card 1 header
+    expect(lines[7]).toMatchObject({ text: `╰${"─".repeat(38)}╯`, card: true, border: "red" }); // card 1 bottom border
+    expect(lines[8]).toMatchObject({ text: " ".repeat(40), card: false }); // gap
+    expect(lines[9]).toMatchObject({ text: `╭${"─".repeat(38)}╮`, card: true, border: "green" }); // card 2 top border
+  });
+});
+
 describe("TUI screen-line model — parity with the real render", () => {
   const THREE = [
     OK,

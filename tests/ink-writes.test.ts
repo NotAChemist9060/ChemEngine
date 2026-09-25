@@ -227,4 +227,92 @@ describe("TUI frame writes (Ink renderer)", () => {
       tui.unmount();
     }
   });
+
+  it("keeps scrolled and bottom-pinned multi-card drags incremental, copying real cards", { timeout: 30000 }, async () => {
+    const tui = await mountTui();
+    const markerRows = () => {
+      // Scan the CURRENT frame only: the accumulated buffer contains every
+      // historical marker line (7 → 14 → 21 → 28 as cards were submitted), so
+      // the LAST occurrence is the on-screen marker.
+      const all = [...tui.text().matchAll(/▲ (\d+) rows above/g)];
+      return all.length ? Number(all[all.length - 1]![1]) : null;
+    };
+    try {
+      // Overflow the 13-row viewport: six element cards ≈ 41 content rows, so
+      // every scroll position starts mid-stack (range.start > 0) — the exact
+      // path the single-card drag test misses. Before the fix, pressing here
+      // blanked the pane (whole-pane rewrite ≈ 1.7 KB) and copied 0 chars.
+      for (const sym of ["O", "H", "Na", "Fe", "K", "Ca"]) {
+        for (const ch of `element ${sym}`) {
+          tui.push(ch);
+          await tui.wait(60);
+        }
+        tui.push("\r");
+        await tui.wait(250);
+      }
+
+      // Pane-local (row, col) → terminal (col+2, row+7): press on local (2,6),
+      // extend down to (5, 29). The selection box rows 2-5 always covers a
+      // card header ("#N $ element X"), whatever the exact per-card heights.
+      const dragAndCopy = async (): Promise<number> => {
+        const press = tui.text().length;
+        tui.emitMouse("\u001b[<0;8;9M");
+        await tui.wait();
+        const pressDelta = tui.text().length - press;
+        expect(pressDelta, `press wrote ${pressDelta} B`).toBeGreaterThan(0);
+        expect(pressDelta, `press wrote ${pressDelta} B`).toBeLessThan(400);
+
+        const m1 = tui.text().length;
+        tui.emitMouse("\u001b[<32;21;11M"); // rows 2-4 × cols 6-19
+        await tui.wait();
+        const m1Delta = tui.text().length - m1;
+        expect(m1Delta, `motion wrote ${m1Delta} B`).toBeGreaterThan(0);
+        expect(m1Delta, `motion wrote ${m1Delta} B`).toBeLessThan(1200);
+
+        const m2 = tui.text().length;
+        tui.emitMouse("\u001b[<32;31;12M"); // rows 2-5 × cols 6-29
+        await tui.wait();
+        const m2Delta = tui.text().length - m2;
+        expect(m2Delta, `motion wrote ${m2Delta} B`).toBeGreaterThan(0);
+        expect(m2Delta, `motion wrote ${m2Delta} B`).toBeLessThan(1200);
+
+        const release = tui.text().length;
+        tui.emitMouse("\u001b[<0;31;12m"); // release → finish → copy
+        await tui.wait(200);
+        const releaseDelta = tui.text().length - release;
+        expect(releaseDelta, `release wrote ${releaseDelta} B`).toBeGreaterThan(0);
+        expect(releaseDelta, `release wrote ${releaseDelta} B`).toBeLessThan(1500);
+
+        const out = tui.text();
+        const osc = out.slice(release).match(/\x1b\]52;c;([A-Za-z0-9+/=]*)\x07/);
+        expect(osc, "OSC 52 payload written after the drag").not.toBeNull();
+        const decoded = Buffer.from(osc![1]!, "base64").toString("utf8");
+        expect(decoded, "copied text shows real card content, not blanks").toContain("element");
+        expect(out.slice(release)).toContain("copied"); // "copied N chars" toast
+        return tui.text().match(/\x1b\]52;c;/g)?.length ?? 0;
+      };
+
+      // Phase 1 — bottom-pinned stack (scrollTop null, 6 cards): used to blank
+      // on press; must copy the newest cards' real headers.
+      const copiesAfterPhase1 = await dragAndCopy();
+      expect(copiesAfterPhase1).toBeGreaterThan(0);
+
+      // Phase 2 — PgUp onto a mid-stack window, then drag again. The marker
+      // count must drop (scrolled away from the bottom), and the drag must stay
+      // incremental and copy the cards now on screen.
+      const bottomRowMark = markerRows();
+      expect(bottomRowMark, "bottom-pinned overflow shows a marker").toBeGreaterThan(0);
+      tui.push("\u001b[5~"); // PgUp → scroll-up
+      await tui.wait(200);
+      const scrolledRowMark = markerRows();
+      expect(scrolledRowMark, "PgUp leaves us scrolled up the stack").not.toBeNull();
+      expect(scrolledRowMark!).toBeLessThan(bottomRowMark!);
+
+      const copiesBeforePhase2 = tui.text().match(/\x1b\]52;c;/g)?.length ?? 0;
+      const copiesAfterPhase2 = await dragAndCopy();
+      expect(copiesAfterPhase2).toBe(copiesBeforePhase2 + 1);
+    } finally {
+      tui.unmount();
+    }
+  });
 });

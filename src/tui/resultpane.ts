@@ -2,7 +2,7 @@ import { createElement } from "react";
 import type { ReactNode } from "react";
 import { Text } from "ink";
 import { box } from "./el.ts";
-import { buildScreenLines, resultHeights, scrollMax, clampScroll, visibleRange, type VisibleRange } from "./scroll.ts";
+import { buildScreenLines } from "./scroll.ts";
 import { selectionCell, type Selection } from "./select.ts";
 import type { ResultEntry } from "./state.ts";
 
@@ -15,9 +15,10 @@ export interface ResultPaneProps {
   /** Card width in columns (border + padding included). */
   width: number;
   /**
-   * Active drag selection (viewport-local). When non-null the pane renders the
-   * screen-line grid with per-cell inverse highlight instead of card boxes —
-   * the same rows `buildScreenLines` models, so selection matches extraction.
+   * Active drag selection (viewport-local). The pane renders one screen-line
+   * grid in both states — the same rows `buildScreenLines` models — and the
+   * selection only changes per-cell styles, so switching into a drag never
+   * reflows the pane and selection always matches extraction.
    */
   selection?: Selection | null;
 }
@@ -26,27 +27,30 @@ export interface ResultPaneProps {
 const BORDER_GLYPHS = new Set(["╭", "╮", "╰", "╯", "│", "─"]);
 
 /**
- * Selection render path: one `<Text>` per screen-model row, split into runs by
- * per-cell style. The non-selected cells must be byte-identical to the card-box
- * path (so switching paths mid-drag never reflows the pane):
+ * Screen-line render path: one `<Text>` per `buildScreenLines` row, split into
+ * runs by per-cell style:
  *
  * - selected cells → flat `inverse` (the highlight is the background swap;
  *   no color/dim so it stays readable on any row);
  * - box border glyphs (`╭╮╰╯│─`) → the card's `border` color, never dim;
  * - everything else (padding, header/body text, marker) → `dim` on dim rows
  *   (headers, marker), otherwise default.
+ *
+ * With no selection every cell takes the plain glyph/dim/default styling, which
+ * is byte-identical to the pre-unification card-box path (guarded by the
+ * screen-lines parity tests), so the pane renders identically idle or dragging.
  */
-function renderSelectionLines(
+function renderGrid(
   results: readonly ResultEntry[],
   scrollTop: number | null,
   viewportRows: number,
   width: number,
-  selection: Selection,
+  selection: Selection | null,
 ): ReactNode {
   const lines = buildScreenLines(results, scrollTop, viewportRows, width);
   const rows: ReactNode[] = lines.map((line) => {
     const styleOf = (i: number): { selected: boolean; glyph: boolean; dim: boolean } => {
-      const selected = selectionCell(selection, line.row, i);
+      const selected = selection !== null && selectionCell(selection, line.row, i);
       return {
         selected,
         glyph: line.card ? BORDER_GLYPHS.has(line.text[i] ?? "") : false,
@@ -88,47 +92,5 @@ export function ResultPane({ results, scrollTop, viewportRows, width, selection 
       createElement(Text, { dimColor: true }, "No results yet — type a command, or press / for the palette."),
     );
   }
-
-  if (selection) {
-    return renderSelectionLines(results, scrollTop, viewportRows, width, selection);
-  }
-
-  // A scrolled-off region reserves one marker row at the top of the pane; the
-  // cards then occupy the remaining `cardViewportRows`, so cumulative offsets
-  // stay exact and the marker never steals a card row.
-  const markerRows = scrollTop !== null && scrollTop > 0 ? 1 : 0;
-  const cardViewport = Math.max(1, viewportRows - markerRows);
-  const heights = resultHeights(results, Math.max(1, width));
-  const max = scrollMax(heights, cardViewport);
-  const top = scrollTop === null ? max : clampScroll(scrollTop, max);
-  const range: VisibleRange = visibleRange(top, heights, cardViewport);
-  const visible = results.slice(range.start, range.end);
-
-  const cards: ReactNode[] = visible.map((entry) =>
-    box(
-      {
-        key: entry.id,
-        flexDirection: "column",
-        borderStyle: "round",
-        borderColor: entry.ok ? "green" : "red",
-        paddingX: 1,
-        paddingY: 1,
-        width,
-      },
-      createElement(Text, { dimColor: true }, `#${entry.id} $ ${entry.command}`),
-      createElement(Text, {}, entry.output),
-    ),
-  );
-
-  if (top > 0) {
-    cards.unshift(
-      createElement(
-        Text,
-        { dimColor: true, wrap: "truncate" },
-        `▲ ${top} rows above — scroll down`,
-      ),
-    );
-  }
-
-  return box({ flexDirection: "column", paddingX: 1, gap: 1 }, ...cards);
+  return renderGrid(results, scrollTop, viewportRows, width, selection ?? null);
 }

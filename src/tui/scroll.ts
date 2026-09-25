@@ -167,8 +167,17 @@ export function buildScreenLines(
   const cardViewport = Math.max(1, viewportRows - markerRows);
   const heights = resultHeights(results, Math.max(1, width));
   const max = scrollMax(heights, cardViewport);
-  const top = scrollTop === null ? max : clampScroll(scrollTop, max);
-  const range = visibleRange(top, heights, cardViewport);
+  const rawTop = scrollTop === null ? max : clampScroll(scrollTop, max);
+  const range = visibleRange(rawTop, heights, cardViewport);
+  // Pinned to the newest output (scrollTop null): anchor the window at the
+  // first visible card's content offset so cards render from their very first
+  // row — preserving the bottom-anchored autoscroll view where the newest
+  // card's header stays on screen. A scrolled offset keeps the exact
+  // content-row window, so the "▲ N rows above" marker count is truthful.
+  const top =
+    scrollTop === null && range.start < heights.length
+      ? heights.slice(0, range.start).reduce((sum, h) => sum + h, 0)
+      : rawTop;
 
   const lines: PaneLine[] = [];
   const push = (row: number, text: string, extra: Partial<PaneLine> = {}): void => {
@@ -185,7 +194,11 @@ export function buildScreenLines(
   // Emit the visible cards, starting `top` rows into the content so the window
   // [top, top+cardViewport) matches the rows actually on screen. `cum` tracks
   // each card's content-row offset in heights space (trailing gap included).
-  let cum = 0;
+  // The loop only visits cards ≥ range.start, so `cum` must begin at that
+  // card's offset (the sum of every row before it) — counting from 0 made
+  // every mid-stack window skip the wrong cards (blank rows or newer cards
+  // pulled forward) whenever the first card was scrolled off-screen.
+  let cum = heights.slice(0, range.start).reduce((sum, h) => sum + h, 0);
   for (let i = range.start; i < range.end; i++) {
     const entry = results[i]!;
     const border = entry.ok ? "green" : "red";
