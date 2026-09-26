@@ -88,6 +88,12 @@ describe("the result carries what was asked and what was said", () => {
     expect(result.species.map((s) => s.formula)).toEqual(["CaO", "CO2"]);
   });
 
+  it("tolerates spaced + reactant punctuation", () => {
+    const spaced = predict("CH4 + O2");
+    const plain = predict("CH4 O2");
+    expect(spaced).toEqual(plain);
+  });
+
   it("no reaction is never silence: N2 + O2 comes back with the refused reason", () => {
     const result = predict("N2 O2");
     expect(result.candidates).toHaveLength(0);

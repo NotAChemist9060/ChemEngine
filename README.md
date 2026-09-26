@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.4.0                autonomous · offline · local   ║
+║  ChemEngine v0.4.1                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │

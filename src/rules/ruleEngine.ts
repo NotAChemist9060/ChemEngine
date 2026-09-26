@@ -66,9 +66,12 @@ export interface PredictionResult {
   declined: Declined[];
 }
 
-/** Build the engine's context from the raw input line. */
+/** Build the engine's context from the raw input line, ignoring standalone `+` reactant punctuation. */
 export function contextOf(input: string): PredictContext {
-  const tokens = input.trim().split(/\s+/).filter((token) => token.length > 0);
+  const tokens = input
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0 && token !== "+");
   return { input: tokens.join(" "), species: tokens.map(parseSpeciesInput) };
 }
 

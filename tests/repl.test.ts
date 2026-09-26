@@ -56,7 +56,7 @@ describe("command runner", () => {
 
   it("general help lists commands and the version", () => {
     const h = runCommand("help", "");
-    expect(h).toContain("ChemEngine v0.4.0");
+    expect(h).toContain("ChemEngine v0.4.1");
     expect(h).toContain("balance");
     expect(h).toContain("element");
     expect(h).toContain("exit, quit");
@@ -88,6 +88,13 @@ describe("command runner", () => {
     expect(out).toContain("Predicting Mg O2.");
     expect(out).toContain("2Mg(s) + O2(g) -> 2MgO(s)");
     expect(out).toContain("combination — spontaneous");
+  });
+
+  it("predict tolerates spaced + reactant punctuation", () => {
+    const out = runCommand("predict", "CH4 + O2");
+    expect(out).toContain("Predicting CH4 + O2.");
+    expect(out).toContain("combustion — spontaneous");
+    expect(out).toContain("-817.90");
   });
 
   it("prices a user equation from the command runner", () => {

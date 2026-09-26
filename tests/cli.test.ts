@@ -28,7 +28,7 @@ function consoleRun(input: string): { out: string; status: number } {
 
 describe("CLI one-shot", () => {
   it("shows help", () => {
-    expect(cli("--help")).toContain("ChemEngine v0.4.0");
+    expect(cli("--help")).toContain("ChemEngine v0.4.1");
   });
 
   it("balances methane combustion end-to-end", () => {
@@ -74,6 +74,13 @@ describe("CLI predict", () => {
     expect(out).toContain("Predicting CH4 O2.");
     expect(out).toContain("combustion — spontaneous");
     expect(out).toContain("CH4(g) + 2O2(g) -> CO2(g) + 2H2O(l)");
+    expect(out).toContain("-817.90");
+  });
+
+  it("tolerates spaced + reactant punctuation", () => {
+    const out = cli("predict CH4 + O2");
+    expect(out).toContain("Predicting CH4 + O2.");
+    expect(out).toContain("combustion — spontaneous");
     expect(out).toContain("-817.90");
   });
 
@@ -138,7 +145,7 @@ describe("CLI interactive console", () => {
   it("runs commands from piped stdin", () => {
     const { out, status } = consoleRun("help\nbalance CH4 + O2 -> CO2 + H2O\nexit\n");
     expect(status).toBe(0);
-    expect(out).toContain("ChemEngine v0.4.0");
+    expect(out).toContain("ChemEngine v0.4.1");
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");
   });
 
@@ -150,7 +157,7 @@ describe("CLI interactive console", () => {
   });
 
   it("prints the version on --version", () => {
-    expect(cli("--version").trim()).toBe("0.4.0");
+    expect(cli("--version").trim()).toBe("0.4.1");
   });
 
   it("lists predict and feasibility as real commands, simulate still planned", () => {
