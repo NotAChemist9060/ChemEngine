@@ -52,7 +52,12 @@ export interface PredictContext {
 /** A species reference in a proposed equation. */
 export interface TermSpec {
   formula: string;
-  state?: PhysicalState;
+  /**
+   * The phase to write. Explicitly allowed to be `undefined`: a rule that
+   * cannot know the phase writes none, and the thermo lookup then reports an
+   * unknown rather than the engine picking a phase on the rule's behalf.
+   */
+  state?: PhysicalState | undefined;
   /** Written for readability; the engine recomputes it when balancing. */
   coefficient?: number;
 }
