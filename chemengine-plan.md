@@ -169,16 +169,13 @@ Acceptance: `npm test` + `tsc --noEmit` green (**138 tests**); Task 10 live chec
 
 Environment: Windows + PowerShell (no `head`; use `Select-Object -First/-Last`). Node 24 runs TS natively (`node src/cli/index.ts …`). Commands that work: `npx vitest run <file>`, `npx tsc --noEmit`, `npm test`. Git identity `nac9060` configured; remote github.com/NotAChemist9060/ChemEngine (private). `renderToString` renders at ~80 cols — column interleaving in tests is an artifact; row positions are what matter.
 
-> Handoff below is current as of the M3 close. Everything before it was M2b.1-era planning and is gone; what remains is the state of the tree and how to start the next milestone.
+> Handoff below is current as of the M4 kickoff. Everything before it was M2b.1-era planning and is gone; what remains is the state of the tree and how to work the next milestone.
 
-**Where we are:** M3 shipped and pushed — HEAD `5ab1ee6`, v0.3.0, **396 tests / 26 files green**, `tsc --noEmit` clean, working tree clean and in sync with `origin/main`. The next milestone is **M4 — prediction (rules + thermodynamics)**, and none of it is in the tree yet: no `data/thermo.json`, no `src/rules/`, no `src/thermo/`.
+**Where we are:** M3 shipped and pushed — `5ab1ee6`, v0.3.0, **396 tests / 26 files green**, `tsc --noEmit` clean, in sync with `origin/main`. **M4 has started with T1 only: the `### M4` section in §4 is written and the §10 row says in progress.** None of the code is in the tree yet — no `data/thermo.json`, no `src/rules/`, no `src/thermo/`.
 
-**Starting M4** — plan the sprint section first, then one task at a time with a gate after each, the way M3 was run:
-1. `data/thermo.json` — ΔGf° at 298.15 K for the species the rules can propose, one cited source per entry (§6). It is the only new *data* dependency, and the M4 acceptance is a textbook ΔG, so give it its own task and a test that pins several known values (methane combustion ≈ −818 kJ/mol is the one to hit).
-2. `src/thermo/thermo.ts` — `ΔG_rxn = Σ n·ΔGf°(products) − Σ n·ΔGf°(reactants)`, over the exact rationals from `core/balance.ts`. A species missing from the table is an explicit `unknown`, never a silent zero.
-3. `src/rules/` — the `ReactionRule` interface, then the §5 inventory one rule at a time, then `ruleEngine.ts` to run *every* applicable rule ("all applicable rules fire", §3) rather than stopping at the first hit.
-4. `src/thermo/feasibility.ts` — rank candidates by ΔG_rxn, each carrying its own explanation.
-5. `chem predict` + card, help/examples/guide/`PLANNED`, tests; version 0.4.0 at the end.
+**Starting M4** — the §4 M4 section is the single source of truth: it carries the six locked decisions, the file table, the contracts and the T2–T16 task table. Work it **one task at a time, gate after each** (`npx vitest run <file>` + `npx tsc --noEmit`), the way M3 was run. Do not re-derive what the section already fixes — the notable ones are that **phases are first-class** (per-phase ΔGf°, states on every proposed species, because the milestone's acceptance number is the liquid-water figure), that **combination/decomposition are curated tables** rather than generated chemistry, and that **no-reaction and unknown-ΔG are both reported out loud** instead of collapsing to an empty list.
+
+The short version of the order: **data → math → contracts → reference tables → six rules, one per task → engine → ranking → CLI → version/docs → gate + push.** `data/thermo.json` is the only new *data* dependency, so it goes first and is grown rule family by rule family, with a cross-check in T12 that every species any rule can propose has an entry.
 
 M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid from base from salt, so neutralization and double-displacement rules can key off the classifier instead of string matching; and `structure/fromFormula.ts` gives a real graph per species, so a rule can ask about ions and their charges rather than re-parsing the formula.
 
@@ -225,8 +222,56 @@ M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid f
 - [x] T12 — full gate (`npm test` 396/26 files + `npx tsc --noEmit` clean), console check via piped stdin (`classify H2SO4` / `C2H6O` / `XeF2` all render), commit + push.
 
 ### M4 — Prediction (rules + thermodynamics)
-- `ReactionRule` interface; built-in rules: **combustion, neutralization, single displacement** (embedded reactivity series), **double displacement** (embedded solubility rules), **combination, decomposition**; `data/thermo.json` (ΔGf° ≈200 species, cited sources); ΔG ranking with explanations; explicit unknown/no-rule outcomes.
-- **Acceptance:** `chem predict "CH4 O2"` → ranked candidates with ΔG + reasoning; ΔG tests match textbook values (combustion of methane ≈ −818 kJ/mol).
+
+**Decisions (2026-09-26, user-approved):**
+1. **Phases are first-class.** `data/thermo.json` carries one ΔGf° per phase per species (`H2O`: `l`/`g`/`aq`), and rules emit a phase for every species they propose, so a prediction reads `CH4(g) + 2O2(g) -> CO2(g) + 2H2O(l)`. This is not decoration: with `H2O(g)` the methane combustion comes out at −800.8 kJ/mol, and the milestone's acceptance value (−818) is the **liquid** water figure. `StoichTerm.state` already exists in `core/equation.ts`; M4 is what finally populates it.
+2. **All six §5 rules ship in M4**, one rule per task. Combination and decomposition are **curated reaction tables**, not generated chemistry: a formula cannot tell us that `CaCO3` is the one carbonate that decomposes at 298 K. A new reaction is a new entry, never a new guess — the same "curated, not inferred" stance `structure/templates.ts` took.
+3. **Both awkward outcomes are stated, not swallowed** (§3). A pair that cannot react reports *why* ("no precipitate forms", "Cu sits below H in the reactivity series"); a candidate whose ΔGf° is missing is ranked **after** every known one and labelled `ΔG unknown`. A silent empty list would read as "nothing happens", which is the confident-wrong-answer the plan forbids.
+4. **Thermo data is written from standard references, then the pinned values are checked against NIST WebBook** (§6, §6a). Every entry carries its own `source`; the ~20 values the tests pin are the ones verified. No network at runtime.
+5. **`chem predict` *and* `chem feasibility`** — the second is 20 lines: balance an equation the user wrote, then judge it. It exercises thermo without inventing reactants, and it is the natural sibling of `chem balance`.
+6. **Version 0.4.0** at the end of the milestone.
+
+**Design (layers L3/L4, pure functions, no new runtime deps):**
+
+| File | Role |
+|---|---|
+| `data/thermo.json` | ΔGf° per species per phase, kJ/mol @ 298.15 K, each entry with `name` + `source` |
+| `src/thermo/table.ts` | loads the table, indexes by canonical Hill key + phase, `dGfOf(formula, state?)` |
+| `src/thermo/thermo.ts` | `reactionGibbs(BalancedEquation)` — Σ n·ΔGf°(products) − Σ n·ΔGf°(reactants) over `util/rational.ts` |
+| `src/thermo/feasibility.ts` | `assess` one candidate, `rank` the set; each carries its own explanation |
+| `src/rules/types.ts` | `ReactionRule`, `PredictContext`, `SpeciesInput`, `Proposal`, `Candidate` |
+| `src/rules/ions.ts` | cation/anion split from a `StructureBuild` (a real graph, not string surgery) + salt building |
+| `src/rules/series.ts` | the reactivity series, with H as the hydrogen line |
+| `src/rules/solubility.ts` | solubility rules + the Ag/Pb/Hg exceptions |
+| `src/rules/combustion.ts` | `hydrocarbon + O2 -> CO2 + H2O` |
+| `src/rules/neutralization.ts` | `acid + base -> salt + water` (keys off the classifier, not the formula string) |
+| `src/rules/singleDisplacement.ts` | `metal + salt/acid -> new salt + metal/H2`, gated by the series |
+| `src/rules/doubleDisplacement.ts` | `salt + salt -> ...` where one product precipitates |
+| `src/rules/combination.ts` | curated: `H2 + O2`, `Na + Cl2`, `C + O2`, `NH3 + HCl`, … |
+| `src/rules/decomposition.ts` | curated: `CaCO3 -> CaO + CO2`, `H2O2 -> H2O + O2`, `KClO3 -> KCl + O2`, … |
+| `src/rules/ruleEngine.ts` | runs **every** applicable rule, dedupes, balances each proposal, records skip reasons |
+
+**Core contracts.** A rule is declarative in two beats: `applies(ctx)` is a cheap class-level check, `propose(ctx)` returns proposals with phases. `predict(ctx) → { candidates, noReaction[], rules[] }` where a `Candidate` is `{ rule, balanced, skipReason? }` — the engine balances rather than trusting a rule to emit correct coefficients, so a wrong rule surfaces as a skip reason instead of a wrong equation. `reactionGibbs` **never throws** for a species it lacks: `known: false` plus the list of what is missing. `assess` returns a verdict in `{ spontaneous, marginal, nonspontaneous, unknown }` (`marginal` = \|ΔG\| under a small threshold, where a standard-state number says little); `rank` sorts known candidates by ascending ΔG and puts unknown-ΔG ones last, flagged.
+
+**Acceptance:** `chem predict "CH4 O2"` → ranked candidates with ΔG + reasoning; `chem feasibility "H2 + 1/2O2 -> H2O(g)"` → the phase-sensitive counterpart; ΔG tests match textbook values (`CH4(g) + 2O2(g) -> CO2(g) + 2H2O(l)` = **−817.9 kJ/mol**; `CaCO3 -> CaO + CO2` = **+131.1**, correctly non-spontaneous); positive *and* negative cases for all six rules; a test that every species any rule can propose has a ΔGf° entry; `npm test` + `npx tsc --noEmit` green; live-terminal check; committed + pushed as `M4: … (v0.4.0)`.
+
+**Task table** (one task at a time, gate after each: `npx vitest run <file>` + `npx tsc --noEmit`):
+- [x] T1 — plan doc: this section + §10 status row.
+- [ ] T2 — `src/thermo/table.ts` (loader, canonical Hill keys, phase index) + a seed `data/thermo.json` (~30 species covering the tests) + `tests/thermo-table.test.ts` (every entry parses, key round-trips, phases ∈ s/l/g/aq, element reference states are 0, no duplicates).
+- [ ] T3 — grow `data/thermo.json` rule family by rule family until it covers every proposal; NIST WebBook check on the values the tests pin.
+- [ ] T4 — `src/thermo/thermo.ts` + `tests/thermo.test.ts` (methane −817.9, C −394.4, H2 −237.1, CaCO3 +131.1, HCl+NaOH, an `H2O(l)` vs `H2O(g)` pair, and missing-species → `unknown`).
+- [ ] T5 — `src/rules/types.ts` + `src/rules/ions.ts` (cation/anion split from a structure, salt building from ion formulas) + tests.
+- [ ] T6 — `src/rules/series.ts` + `src/rules/solubility.ts` + tests.
+- [ ] T7 — `src/rules/combustion.ts` + tests (CH4, C2H6, C6H6; negatives: no O2, not a hydrocarbon).
+- [ ] T8 — `src/rules/neutralization.ts` + tests (HCl+NaOH, H2SO4+Ca(OH)2, CH3COOH+NaOH; negatives: acid+acid, base+base, salt+base).
+- [ ] T9 — `src/rules/singleDisplacement.ts` + tests (Zn+CuSO4, Fe+HCl, Na+H2O where curated; negative: Cu+ZnSO4 below the series).
+- [ ] T10 — `src/rules/doubleDisplacement.ts` + tests (AgNO3+NaCl, BaCl2+Na2SO4; negative: NaCl+KNO3, both soluble).
+- [ ] T11 — `src/rules/combination.ts` + `src/rules/decomposition.ts` curated tables + tests.
+- [ ] T12 — `src/rules/ruleEngine.ts` (all rules fire, dedupe, balance, skip reasons) + the thermo-coverage cross-check test.
+- [ ] T13 — `src/thermo/feasibility.ts` (verdicts, ranking, one explanation per candidate) + tests.
+- [ ] T14 — `chem predict` + `chem feasibility` + result cards, `help`/`examples`/guide/`PLANNED`, cli/repl/tui tests.
+- [ ] T15 — version 0.4.0 + README (predict/feasibility sections, milestone row, architecture tree) + plan §10.
+- [ ] T16 — full gate (`npm test` + `npx tsc --noEmit`), live-terminal check, commit + push.
 
 ### M5 — Kinetics
 - `SimEngine` interface; mass-action rate laws (reversible `<=>`); adaptive-step RK4; conservation invariants (atoms/mass) checked per step; CSV/JSON export.
@@ -241,9 +286,9 @@ M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid f
 - Neutralization: `acid + base → salt + water`
 - Single displacement: `metal + salt/acid → new salt + metal/hydrogen` (reactivity series)
 - Double displacement: `salt + salt → …` (solubility rules)
-- Combination / decomposition of common compounds
+- Combination / decomposition of common compounds — as **curated reaction tables**, not generated chemistry (see M4 decision 2)
 
-New rules = new files implementing `ReactionRule`, no engine changes.
+New rules = new files implementing `ReactionRule`, no engine changes. All six ship in M4, one per task; the file table, contracts and T2–T16 breakdown are in the `### M4` section of §4.
 
 ## 6. Data provenance
 
@@ -298,5 +343,5 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2b.4 — select & copy v0.2.4 (drag-select over results → release copies via OSC 52, `~/.chemengine/last-selection.txt` fallback; selection-aware incremental rendering; per-cell highlight parity) — 198 tests green, `tsc` clean, pushed; live check done → its three findings shipped as M2b.5
 - [x] M2b.5 — copy/geometry/display-cell fixes v0.2.5 (native `clip.exe` clipboard chain with method-naming toasts; `display.ts` grapheme/display-column line model so wide glyphs and ANSI keep card borders flush; marker-aware `scrollGeometry` reaching the true bottom + `clamp-scroll` on resize) — 220 tests green (18 files), `tsc` clean, live-verified, pushed
 - [x] M3 — structure + classification (v0.3.0) — T1–T12 done, pushed: element `group`/`period`; `structure/valence.ts`; `structure/molecule.ts` (hydrogens implicit, no H nodes); `structure/dsl.ts` + 73 curated templates; three-tier `structure/fromFormula.ts` (template → valence-built → empirical, never throws for a parseable formula); `knowledge/classify.ts` (19 classes in specificity order, evidence per class, caveats for ambiguity and for a missing structure); `structure/smiles.ts` (interface + one-slot registry, no parser); `chem classify` + card; TUI palette/completions/guide. 396 tests green (26 files), `tsc` clean. Decided along the way: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command, and two classes added beyond the planned 17 (`element`, `peroxide`) because common species otherwise fell through to `unknown`.
-- [ ] M4 — prediction (rules + thermodynamics) — next. Not started: no `data/thermo.json`, no `src/rules/`, no `src/thermo/`. Start with the §4 M4 section; task breakdown is that section's job, done at the start of the milestone.
+- [ ] M4 — prediction (rules + thermodynamics) — **in progress**. T1 done (this section). Nothing else in the tree yet: no `data/thermo.json`, no `src/rules/`, no `src/thermo/`. Decided at the start: phases are first-class (per-phase ΔGf°, states in rule output, because the −818 kJ/mol acceptance value is the liquid-water figure); all six §5 rules ship, one per task; combination/decomposition are curated reaction tables; no-reaction and unknown-ΔG outcomes are both stated explicitly; the pinned ΔG values get a NIST WebBook check before they enter the data file; `chem predict` and `chem feasibility` both ship; version 0.4.0 at the end.
 - [ ] M5 — kinetics + CLI polish
