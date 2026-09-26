@@ -284,6 +284,24 @@ interface ChargedFormula {
 }
 
 /**
+ * Read a written formula's charge suffix, e.g. `SO4^2-` → `SO4` and −2.
+ *
+ * Exported because there is exactly one charge reader in the engine: the rules
+ * layer builds salts and conjugate bases from ion formulas, and it reuses this
+ * rather than growing a second parser that would disagree about `SO42-`.
+ * `undefined` when the formula cannot be read at all.
+ */
+export function splitChargedFormula(formula: string): ChargedFormula | undefined {
+  try {
+    const split = splitCharge(formula);
+    parseFormula(split.atoms);
+    return split;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Split a written formula into atoms and charge.
  *
  * Three unambiguous spellings are accepted, and they are the three this
