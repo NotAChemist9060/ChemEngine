@@ -24,8 +24,8 @@ data/
 src/
   util/                rational.ts (exact arithmetic) · units.ts (mol/L/s)
   core/                elements · formula · equation · balance          (L0: math)
-  structure/           Molecule graph (atoms/bonds) · fromFormula.ts
-                       smiles.ts                                       (L1: interface stub)
+  structure/           valence · molecule (atoms/bonds) · dsl · templates
+                       fromFormula · smiles                                (L1: structure)
   knowledge/           classify.ts                                      (L2: species classes)
   rules/               ReactionRule interface · built-in rules
                        ruleEngine.ts                                    (L3: candidate proposals)
@@ -169,34 +169,26 @@ Acceptance: `npm test` + `tsc --noEmit` green (**138 tests**); Task 10 live chec
 
 Environment: Windows + PowerShell (no `head`; use `Select-Object -First/-Last`). Node 24 runs TS natively (`node src/cli/index.ts …`). Commands that work: `npx vitest run <file>`, `npx tsc --noEmit`, `npm test`. Git identity `nac9060` configured; remote github.com/NotAChemist9060/ChemEngine (private). `renderToString` renders at ~80 cols — column interleaving in tests is an artifact; row positions are what matter.
 
-> Handoff below is historical (pre-commit M2b.1 planning). Tasks 7–9 are done, Task 10 is the live-terminal step; the M2b.2 block above supersedes it for current work. v0.2.2 is committed — the next code work is M3.
+> Handoff below is current as of the M3 close. Everything before it was M2b.1-era planning and is gone; what remains is the state of the tree and how to start the next milestone.
 
-**Task 7 — version 0.2.1 + `wrap-ansi` (do this next):**
-1. `package.json` — `"version": "0.2.0"` → `"0.2.1"`; add `wrap-ansi` to `dependencies` (hoisted ink dep; ESM default import already proven in `src/tui/scroll.ts`: `import wrapAnsi from "wrap-ansi"`). Pick a version matching what ink hoists (check `node_modules/wrap-ansi/package.json`).
-2. `src/cli/commands.ts:7` — `VERSION = "0.2.0"` → `"0.2.1"` (single source of truth; flows to banner/guide/`--version`).
-3. `src/tui/footer.ts` — HINTS `+= "· wheel"` (place after `PgUp/Dn`): `↵ run · / palette · Tab · ↑↓ hist · PgUp/Dn · wheel · ^L clear · ^G guide · ^C exit`. Must stay 1 content row (wrap: truncate already set).
-4. Tests asserting the literal version → `0.2.1`:
-   - `tests/tui-render.test.ts`: lines 42, 58, 73, 74 (banner test + `renderFrame` helper: `Banner version`/`guideSections version` + `ChemEngine v0.2.0` expectation).
-   - `tests/repl.test.ts:59` and `tests/cli.test.ts:31,55,60` — `ChemEngine v0.2.0` → v0.2.1, `--version` → `0.2.1`.
-   - `tests/tui.test.ts` already uses `0.2.1` (fine, leave).
-5. Verify: `npx vitest run tests/tui-render.test.ts tests/repl.test.ts tests/cli.test.ts` + `npx tsc --noEmit` + `npm test` (expect 135 green).
+**Where we are:** M3 shipped and pushed — HEAD `5ab1ee6`, v0.3.0, **396 tests / 26 files green**, `tsc --noEmit` clean, working tree clean and in sync with `origin/main`. The next milestone is **M4 — prediction (rules + thermodynamics)**, and none of it is in the tree yet: no `data/thermo.json`, no `src/rules/`, no `src/thermo/`.
 
-**Task 8 — full gate:** `npm test` + `npx tsc --noEmit` both clean (should be a formality after Task 7).
+**Starting M4** — plan the sprint section first, then one task at a time with a gate after each, the way M3 was run:
+1. `data/thermo.json` — ΔGf° at 298.15 K for the species the rules can propose, one cited source per entry (§6). It is the only new *data* dependency, and the M4 acceptance is a textbook ΔG, so give it its own task and a test that pins several known values (methane combustion ≈ −818 kJ/mol is the one to hit).
+2. `src/thermo/thermo.ts` — `ΔG_rxn = Σ n·ΔGf°(products) − Σ n·ΔGf°(reactants)`, over the exact rationals from `core/balance.ts`. A species missing from the table is an explicit `unknown`, never a silent zero.
+3. `src/rules/` — the `ReactionRule` interface, then the §5 inventory one rule at a time, then `ruleEngine.ts` to run *every* applicable rule ("all applicable rules fire", §3) rather than stopping at the first hit.
+4. `src/thermo/feasibility.ts` — rank candidates by ΔG_rxn, each carrying its own explanation.
+5. `chem predict` + card, help/examples/guide/`PLANNED`, tests; version 0.4.0 at the end.
 
-**Task 9 — docs, cleanup, commit:**
-- README: add the M2b.1 console/TUI content (pinned layout, guide panel `^G`, row-based scroll PgUp/PgDn + wheel, autoscroll, mouse click-to-cursor, resize-safe input; note it belongs in the console section + maybe hit the milestone table below it). Re-read the existing README console section before editing so it flows.
-- `chemengine-plan.md`: flip M2b.1 §4 status + §10 checklist to done; adjust acceptance test count (actual 135) if it still says ≈145.
-- Delete `probe-render.mts` (superseded by `renderFrame` helper in `tests/tui-render.test.ts`).
-- Commit + push: message like `M2b.1: pinned layout + row scroll + autoscroll + mouse + resize hardening (v0.2.1)` — check `git status` first, stage everything relevant, identity is `nac9060`.
+M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid from base from salt, so neutralization and double-displacement rules can key off the classifier instead of string matching; and `structure/fromFormula.ts` gives a real graph per species, so a rule can ask about ions and their charges rather than re-parsing the formula.
 
-**Task 10 — real-terminal checklist → then M3:**
-Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input visible with guide + 4+ tall outputs; input stays visible after resizing down/up; PgUp/PgDn + wheel scroll only the center; click positions the input cursor; autoscroll follows newest output; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3 — Structure & classification** per §4.
+**Standing invariants** (unchanged, still load-bearing): pure functions everywhere in `src/core`, `src/structure`, `src/knowledge`, `src/rules`, `src/thermo`; no new runtime deps; `UserError` (never a stack trace) for bad user input; one test suite per new module, written before the next module starts; no build step (Node runs the TS directly); limits surfaced in output, never guessed (§7).
 
 ### M3 — Structure & classification (v0.3.0)
 
 **Decisions (2026-09-26, user-approved):**
 1. **Curated templates + heuristic fallback** for connectivity — Tier A exact structures for common species, Tier B valence-driven construction (chains/rings/ion pairs), Tier C empirical fallback. No pure-heuristic-only build, no formula-only classifier.
-2. **SMILES = interface + registry only** — a parser seam, not an implementation. `parseSmiles()` reports "not installed" until a parser is registered.
+2. **SMILES = interface + registry only** — a parser seam, not an implementation. `readSmiles()` returns `{ ok: false, reason, parser }` until a parser is registered, and never throws (a missing, declining, or throwing parser all become a result).
 3. **No `chem structure` command** — structure facts (fragments, bonds, source, confidence) render inside the `classify` card. Keeps the M3 command surface to one new command.
 4. **Version 0.3.0** at the end of the milestone.
 
@@ -204,12 +196,13 @@ Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input v
 
 | File | Role |
 |---|---|
-| `src/structure/molecule.ts` | `Atom`/`Bond`/`Molecule` graph model + helpers (`neighbors`, `degree`, `components`, `formulaOf`) |
-| `src/structure/valence.ts` | allowed valence states per element + `isMetal`/`isHalogen`/`isAlkali`/`isChalcogen` predicates |
-| `src/structure/templates.ts` | Tier A curated exact structures, registry keyed by normalized formula |
-| `src/structure/fromFormula.ts` | Tier B/C builder: hydrate split, ion pairs, chain/ring construction, empirical fallback |
-| `src/structure/smiles.ts` | `SMILESParser` interface + `setSmilesParser` registry (extension point) |
-| `src/knowledge/classify.ts` | `Classify(formula) → { primary, classes[], reasoning[] }` |
+| `src/structure/molecule.ts` | `Atom`/`Bond`/`Molecule` graph model + helpers (`neighbors`, `components`, `ringCount`, `netCharge`, `formulaString`) |
+| `src/structure/valence.ts` | preferred valences, valence states, common charges per element + `isMetal`/`isHalogen`/`isChalcogen`/`isNobleGas`/`isPnicogen` predicates |
+| `src/structure/dsl.ts` | a tiny element-only notation for writing templates (`parseStructure`/`parseIonSet`) — chains, `=`/`#` prefixes, `%digit` ring closures, additive charges, `(H)`/`H<n>` hydrogen modifiers |
+| `src/structure/templates.ts` | Tier A curated exact structures (73), registry keyed by Hill-order formula, each entry also carrying its conventional written formula + display name |
+| `src/structure/fromFormula.ts` | Tier B/C builder: hydrate split, ion pairs (anion-charge-driven, incl. ammonium runs), chain construction, empirical fallback |
+| `src/structure/smiles.ts` | `SmilesParser` interface + `setSmilesParser` registry (extension point) |
+| `src/knowledge/classify.ts` | `classify(formula) → Classification` = `{ input, formula, primary, classes[], reasoning[], caveats[], fromStructure, structure, molarMass }` |
 
 **Core contract — `StructureBuild`:** `{ formula, molecule \| null, source: "template" \| "constructed" \| "empirical", confidence: "high" \| "medium" \| "low", notes: string[] }`. It **never throws** for a formula the parser accepts; an unknown structure surfaces as `empirical` + a note, per §3 ("unknowns are surfaced, never guessed").
 
@@ -221,9 +214,9 @@ Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input v
 - [x] T1 — plan doc: this section + §10 status row + triage the stray `BUG REPORT 4-42-25-9-2026.txt` (all three bugs fixed in v0.2.5).
 - [x] T2 — `data/elements.json` += `group`/`period` (additive optional fields; `scaffold.test.ts` untouched) + `groupOf`/`periodOf`; new `tests/elements.test.ts`.
 - [x] T3 — `structure/valence.ts`: valence states + metal/halogen/alkali/chalcogen predicates + tests.
-- [x] T4 — `structure/molecule.ts`: graph model, helpers, `formulaOf` round-trip, multi-fragment salts + tests.
-- [x] T5 — `structure/templates.ts`: Tier A curated structures + registry, each round-trips to its own formula + tests.
-- [x] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, chain/ring construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
+- [x] T4 — `structure/molecule.ts`: graph model, helpers, `formulaString` round-trip, multi-fragment salts + tests.
+- [x] T5 — `structure/dsl.ts` + `structure/templates.ts`: the template notation, 65 Tier A curated structures + registry, each round-trips to its own formula + tests.
+- [x] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, charge model, chain construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
 - [x] T7 — `knowledge/classify.ts` + evidence-based reasoning; one test per class + negatives.
 - [x] T8 — `structure/smiles.ts`: parser interface + registry, "not installed" path + tests.
 - [x] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
@@ -304,6 +297,6 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2b.3 — anti-blink v0.2.3 (enable Ink incremental rendering: per-keystroke writes drop to just the input row, no full-frame erase+redraw) — 138 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10
 - [x] M2b.4 — select & copy v0.2.4 (drag-select over results → release copies via OSC 52, `~/.chemengine/last-selection.txt` fallback; selection-aware incremental rendering; per-cell highlight parity) — 198 tests green, `tsc` clean, pushed; live check done → its three findings shipped as M2b.5
 - [x] M2b.5 — copy/geometry/display-cell fixes v0.2.5 (native `clip.exe` clipboard chain with method-naming toasts; `display.ts` grapheme/display-column line model so wide glyphs and ANSI keep card borders flush; marker-aware `scrollGeometry` reaching the true bottom + `clamp-scroll` on resize) — 220 tests green (18 files), `tsc` clean, live-verified, pushed
-- [x] M3 — structure + classification (v0.3.0) — T1–T11 done: element `group`/`period`; `structure/valence.ts`; `structure/molecule.ts` (hydrogens implicit, no H nodes); `structure/dsl.ts` + 73 curated templates; three-tier `structure/fromFormula.ts` (template → valence-built → empirical, never throws for a parseable formula); `knowledge/classify.ts` (19 classes in specificity order, evidence per class, caveats for ambiguity and for a missing structure); `structure/smiles.ts` (interface + one-slot registry, no parser); `chem classify` + card; TUI palette/completions/guide. 396 tests green (26 files), `tsc` clean. Decided along the way: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command, and two classes added beyond the planned 17 (`element`, `peroxide`) because common species otherwise fell through to `unknown`.
-- [ ] M4 — prediction (rules + thermodynamics)
+- [x] M3 — structure + classification (v0.3.0) — T1–T12 done, pushed: element `group`/`period`; `structure/valence.ts`; `structure/molecule.ts` (hydrogens implicit, no H nodes); `structure/dsl.ts` + 73 curated templates; three-tier `structure/fromFormula.ts` (template → valence-built → empirical, never throws for a parseable formula); `knowledge/classify.ts` (19 classes in specificity order, evidence per class, caveats for ambiguity and for a missing structure); `structure/smiles.ts` (interface + one-slot registry, no parser); `chem classify` + card; TUI palette/completions/guide. 396 tests green (26 files), `tsc` clean. Decided along the way: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command, and two classes added beyond the planned 17 (`element`, `peroxide`) because common species otherwise fell through to `unknown`.
+- [ ] M4 — prediction (rules + thermodynamics) — next. Not started: no `data/thermo.json`, no `src/rules/`, no `src/thermo/`. Start with the §4 M4 section; task breakdown is that section's job, done at the start of the milestone.
 - [ ] M5 — kinetics + CLI polish
