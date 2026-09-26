@@ -66,6 +66,23 @@ describe("command runner", () => {
     expect(runCommand("help", "balance")).toContain("Balance a chemical equation");
   });
 
+  it("classifies a species", () => {
+    const out = runCommand("classify", "NaOH");
+    expect(out).toContain("sodium hydroxide");
+    expect(out).toContain("base");
+    expect(out).toContain("free OH⁻ anion");
+  });
+
+  it("reports an unclassifiable species honestly", () => {
+    const out = runCommand("classify", "XeF2");
+    expect(out).toContain("unknown");
+    expect(out).toContain("Limits:");
+  });
+
+  it("classify needs a formula", () => {
+    expect(() => runCommand("classify", "")).toThrow(/usage: classify/);
+  });
+
   it("examples run live demos", () => {
     const out = runCommand("examples", "");
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");

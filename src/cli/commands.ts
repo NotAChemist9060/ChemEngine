@@ -1,7 +1,8 @@
 import { balanceEquation } from "../core/balance.ts";
 import { parseEquation } from "../core/equation.ts";
 import { getElement } from "../core/elements.ts";
-import { paint, renderBalanced, renderElement } from "./render.ts";
+import { classify, tryClassify } from "../knowledge/classify.ts";
+import { paint, renderBalanced, renderClassification, renderElement } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
 export const VERSION = "0.2.5";
@@ -46,10 +47,27 @@ export const COMMANDS: CommandDef[] = [
       return renderElement(getElement(sym));
     },
   },
+  {
+    name: "classify",
+    summary: "Classify a species and show the evidence",
+    usage: "classify <formula>",
+    examples: [
+      "classify H2SO4",
+      "classify NaOH",
+      "classify CH3COOH",
+      "classify CuSO4·5H2O",
+    ],
+    run: (argString) => {
+      const a = argString.trim();
+      if (!a) throw new UserError("usage: classify <formula>  (e.g. 'classify H2SO4')");
+      const result = tryClassify(a);
+      if (result === undefined) throw new UserError(`'${a}' is not a formula I can read`);
+      return renderClassification(classify(a));
+    },
+  },
 ];
 
 const PLANNED: ReadonlyArray<readonly [string, string]> = [
-  ["classify", "Classify a species (acid/base/salt/metal/...)  [M3 planned]"],
   ["predict", "Predict reactions from reactants  [M4 planned]"],
   ["simulate", "Simulate reaction kinetics  [M5 planned]"],
 ];
@@ -126,6 +144,7 @@ export function renderExamples(): string {
   const lines: string[] = [paint("Demos", "bold") + " — commands are executed live:", ""];
   const demos: ReadonlyArray<readonly [string, string]> = [
     ["balance", "CH4 + O2 -> CO2 + H2O"],
+    ["classify", "H2SO4"],
     ["element", "O"],
     ["balance", "N2 + H2 <=> NH3"],
   ];

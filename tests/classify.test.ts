@@ -135,6 +135,7 @@ describe("inorganic classes", () => {
     expect(result.primary).toBe("hydrate");
     expect(result.classes).toContain("salt");
     expect(result.reasoning[0]).toContain("5 water molecules");
+    expect(result.molarMass).toBeCloseTo(249.68, 1);
   });
 });
 

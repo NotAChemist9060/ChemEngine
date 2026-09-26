@@ -25,7 +25,7 @@ export function guideSections({ version, commands, elementCount }: GuideContentA
       lines: [
         ...commands,
         "? — 'help' for detail",
-        "classify/predict — M3+",
+        "predict/simulate — M4+",
       ],
     },
     {

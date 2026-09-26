@@ -43,6 +43,18 @@ describe("CLI one-shot", () => {
     expect(out).toContain("15.999");
   });
 
+  it("classifies a species and shows the evidence", () => {
+    const out = cli("classify H2SO4");
+    expect(out).toContain("sulfuric acid");
+    expect(out).toContain("acid");
+    expect(out).toContain("98.072 g/mol");
+    expect(out).toContain("2 hydroxyls on oxygen bonded to S");
+  });
+
+  it("says a formula it cannot read is a user error", () => {
+    expect(() => cli("classify not-a-formula")).toThrow();
+  });
+
   it("fails loudly on an impossible equation", () => {
     expect(() => cli(`balance "CH4 -> C2H6"`)).toThrow();
   });

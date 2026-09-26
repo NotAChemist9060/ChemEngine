@@ -347,10 +347,10 @@ const plural = (n: number, one: string, many: string): string => (n === 1 ? `1 $
  */
 function addSimpleSubstance(out: Findings, symbol: string): void {
   if (isMetal(symbol)) {
-    out.add("metal", `${symbol} on its own: a metal element, not a compound of it`);
-    out.add("element", `one element (${symbol}) and nothing else: a simple substance`);
+    out.add("metal", `${symbol} on its own, a metal element rather than a compound of it`);
+    out.add("element", `nothing but ${symbol}, so a sample of it is a simple substance`);
   } else {
-    out.add("element", `${symbol} on its own: a simple substance, one element and nothing else`);
+    out.add("element", `nothing but ${symbol}, so a sample of it is a simple substance`);
   }
 }
 
@@ -370,7 +370,7 @@ function classifyStructure(mol: Molecule, formula: string, waters: number): Find
   if (waters > 0) {
     out.add(
       "hydrate",
-      `hydrate: ${plural(waters, "water molecule", "water molecules")} of crystallisation attached to the rest`,
+      `${plural(waters, "water molecule", "water molecules")} of crystallisation attached to the rest`,
     );
   }
   if (ev.carboxylC.length > 0) {
@@ -453,7 +453,7 @@ function classifyStructure(mol: Molecule, formula: string, waters: number): Find
   if (carbon && ev.symbols.length === 1) {
     out.add(
       "hydrocarbon",
-      `carbon and hydrogen only, ${plural(ev.rings, "ring", "rings")} in the structure — no other element`,
+      `carbon and hydrogen and no other element, ${ev.rings === 0 ? "no rings" : plural(ev.rings, "ring", "rings")} in the structure`,
     );
   }
   if (ev.hydroxideAnions > 0) {
@@ -509,7 +509,7 @@ function classifyFormulaOnly(formula: string, waters: number): Findings {
   if (waters > 0) {
     out.add(
       "hydrate",
-      `hydrate: ${plural(waters, "water molecule", "water molecules")} of crystallisation, read from the formula`,
+      `${plural(waters, "water molecule", "water molecules")} of crystallisation, read from the formula`,
     );
   }
   if (formula === "H2O2") {
