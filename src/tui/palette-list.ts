@@ -5,7 +5,11 @@ export interface PaletteItem {
   summary: string;
 }
 
-/** Everything reachable from the command palette. */
+/**
+ * Everything reachable from the command palette. The planned list is deliberately
+ * short and *only* holds what COMMANDS does not: a name in both lists would show
+ * up twice, which is the kind of small wrongness a palette should not have.
+ */
 export function paletteItems(): PaletteItem[] {
   const meta: PaletteItem[] = [
     { name: "help", summary: "Show help — 'help <command>' for detail" },
@@ -15,7 +19,6 @@ export function paletteItems(): PaletteItem[] {
     { name: "exit", summary: "Leave ChemEngine" },
   ];
   const planned: PaletteItem[] = [
-    { name: "classify", summary: "Classify a species (acid/base/…)" },
     { name: "predict", summary: "Predict reactions from reactants" },
     { name: "simulate", summary: "Simulate reaction kinetics" },
   ];

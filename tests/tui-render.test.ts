@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "ink";
+import { classify } from "../src/knowledge/classify.ts";
+import { renderClassification } from "../src/cli/render.ts";
 import { Banner, EngineInfo } from "../src/tui/banner.ts";
 import { Footer } from "../src/tui/footer.ts";
 import { Guide, guideSections } from "../src/tui/guide.ts";
@@ -126,6 +128,23 @@ describe("TUI presentation layer", () => {
     expect(out).toContain("unknown command 'balnce'");
     expect(out).toContain("#1");
     expect(out).toContain("╭"); // round borders
+  });
+
+  it("renders a classify card from the real command output", () => {
+    const output = renderClassification(classify("C2H6O"));
+    const out = render(
+      createElement(ResultPane, {
+        results: [{ id: 1, command: "classify C2H6O", output, ok: true }],
+        scrollTop: 0,
+        viewportRows: 24,
+        width: 60,
+      }),
+    );
+    expect(out).toContain("#1");
+    expect(out).toContain("classify C2H6O");
+    expect(out).toContain("ethanol");
+    expect(out).toContain("alcohol");
+    expect(out).toContain("Limits:"); // the honest limit travels with the card
   });
 
   it("renders the empty state", () => {

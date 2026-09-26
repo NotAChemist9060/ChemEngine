@@ -314,6 +314,7 @@ describe("TUI completions", () => {
   it("exposes command names", () => {
     expect(commandNames()).toContain("balance");
     expect(commandNames()).toContain("element");
+    expect(commandNames()).toContain("classify");
   });
 
   it("finds the last token", () => {
@@ -324,6 +325,7 @@ describe("TUI completions", () => {
   it("completes the first word with commands", () => {
     expect(candidatesFor("")).toContain("balance");
     expect(candidatesFor("bal")).toEqual(expect.arrayContaining(["balance"]));
+    expect(candidatesFor("clas")).toEqual(["classify"]);
   });
 
   it("completes later words with element symbols", () => {
@@ -336,6 +338,19 @@ describe("TUI palette list", () => {
   it("lists every command plus meta entries", () => {
     const names = paletteItems().map((i) => i.name);
     expect(names).toEqual(expect.arrayContaining(["balance", "element", "help", "exit", "classify"]));
+  });
+
+  it("lists no name twice", () => {
+    // classify is a real command now, so the hardcoded planned list must not
+    // also claim it or the palette would offer it in two places.
+    const names = paletteItems().map((i) => i.name);
+    expect(names).toHaveLength(new Set(names).size);
+    expect(names.filter((n) => n === "classify")).toHaveLength(1);
+  });
+
+  it("still offers what is not built yet", () => {
+    const names = paletteItems().map((i) => i.name);
+    expect(names).toEqual(expect.arrayContaining(["predict", "simulate"]));
   });
 
   it("filters by substring", () => {
