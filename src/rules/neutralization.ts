@@ -33,6 +33,7 @@ import { saltPhase, solubilityOf } from "./solubility.ts";
 import {
   formatEquation,
   parseSpeciesInput,
+  uniqueDeclines,
   type Declined,
   type PredictContext,
   type Proposal,
@@ -217,16 +218,3 @@ export const neutralization: ReactionRule = {
     return { proposals, declined: uniqueDeclines(declined) };
   },
 };
-
-/** Drop repeated declines: two acids and one ammonia would name ammonia twice. */
-function uniqueDeclines(declined: Declined[]): Declined[] {
-  const seen = new Set<string>();
-  const out: Declined[] = [];
-  for (const entry of declined) {
-    const key = `${entry.subject}\u0000${entry.reason}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(entry);
-  }
-  return out;
-}

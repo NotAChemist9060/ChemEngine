@@ -163,6 +163,19 @@ export function findSpecies(
   return ctx.species.find(test);
 }
 
+/** Drop repeated declines: two acids and one ammonia would name ammonia twice. */
+export function uniqueDeclines(declined: readonly Declined[]): Declined[] {
+  const seen = new Set<string>();
+  const out: Declined[] = [];
+  for (const entry of declined) {
+    const key = `${entry.subject}\u0000${entry.reason}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
+}
+
 /** One term of a proposed equation: coefficient (when not 1), formula, phase. */
 export function formatTerm(spec: TermSpec): string {
   const coefficient = spec.coefficient ?? 1;

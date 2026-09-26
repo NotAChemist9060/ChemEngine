@@ -30,6 +30,7 @@ import { ACID_ANIONS } from "./neutralization.ts";
 import { displacesFromSalt, displacesHydrogen, type SeriesVerdict } from "./series.ts";
 import {
   formatEquation,
+  uniqueDeclines,
   type Declined,
   type PredictContext,
   type Proposal,
@@ -271,19 +272,6 @@ export const singleDisplacement: ReactionRule = {
       }
     }
 
-    return { proposals, declined: unique(declined) };
+    return { proposals, declined: uniqueDeclines(declined) };
   },
 };
-
-/** Drop repeated declines — two identical metals would otherwise repeat. */
-function unique(declined: Declined[]): Declined[] {
-  const seen = new Set<string>();
-  const out: Declined[] = [];
-  for (const entry of declined) {
-    const key = `${entry.subject}\u0000${entry.reason}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(entry);
-  }
-  return out;
-}
