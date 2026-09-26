@@ -213,18 +213,18 @@ Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input v
 
 **Core contract — `StructureBuild`:** `{ formula, molecule \| null, source: "template" \| "constructed" \| "empirical", confidence: "high" \| "medium" \| "low", notes: string[] }`. It **never throws** for a formula the parser accepts; an unknown structure surfaces as `empirical` + a note, per §3 ("unknowns are surfaced, never guessed").
 
-**Classes:** acid, base, salt, metal, oxide, hydroxide, water, hydrocarbon, alcohol, aldehyde, ketone, carboxylic-acid, ester, ether, amine, aromatic, hydrate. Reasoning strings cite the structural evidence (e.g. "4 H bound to O; 2 S=O + 2 S–OH"), never a bare label.
+**Classes:** acid, base, salt, metal, oxide, hydroxide, water, hydrocarbon, alcohol, aldehyde, ketone, carboxylic-acid, ester, ether, amine, aromatic, hydrate, plus two added during T7 because common species otherwise fell through to "unknown": **element** (a simple substance, `N2`/`O2`/`S8`/`H2`; a bare metal also reports it) and **peroxide** (an O–O bond, `H2O2`; `Na2O2` reports salt first, peroxide second). Reasoning strings cite the structural evidence (e.g. "2 hydroxyls on oxygen bonded to S: an oxoacid, ionisable in water"), never a bare label. `reasoning[i]` explains `classes[i]`; `caveats[]` carries the limits — an ambiguous formula (`C2H6O` fits ethanol *and* dimethyl ether) or a classification made from the formula alone because no connectivity could be built.
 
 **Acceptance:** `chem classify "H2SO4"` → `acid` + reasoning; one classifier test per class plus negatives; every new module has tests; `npm test` + `npx tsc --noEmit` green; live-terminal `classify` check; committed + pushed as `M3: … (v0.3.0)`.
 
 **Task table:**
-- [ ] T1 — plan doc: this section + §10 status row + triage the stray `BUG REPORT 4-42-25-9-2026.txt` (all three bugs fixed in v0.2.5).
-- [ ] T2 — `data/elements.json` += `group`/`period` (additive optional fields; `scaffold.test.ts` untouched) + `groupOf`/`periodOf`; new `tests/elements.test.ts`.
-- [ ] T3 — `structure/valence.ts`: valence states + metal/halogen/alkali/chalcogen predicates + tests.
-- [ ] T4 — `structure/molecule.ts`: graph model, helpers, `formulaOf` round-trip, multi-fragment salts + tests.
-- [ ] T5 — `structure/templates.ts`: Tier A curated structures + registry, each round-trips to its own formula + tests.
-- [ ] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, chain/ring construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
-- [ ] T7 — `knowledge/classify.ts` + evidence-based reasoning; one test per class + negatives.
+- [x] T1 — plan doc: this section + §10 status row + triage the stray `BUG REPORT 4-42-25-9-2026.txt` (all three bugs fixed in v0.2.5).
+- [x] T2 — `data/elements.json` += `group`/`period` (additive optional fields; `scaffold.test.ts` untouched) + `groupOf`/`periodOf`; new `tests/elements.test.ts`.
+- [x] T3 — `structure/valence.ts`: valence states + metal/halogen/alkali/chalcogen predicates + tests.
+- [x] T4 — `structure/molecule.ts`: graph model, helpers, `formulaOf` round-trip, multi-fragment salts + tests.
+- [x] T5 — `structure/templates.ts`: Tier A curated structures + registry, each round-trips to its own formula + tests.
+- [x] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, chain/ring construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
+- [x] T7 — `knowledge/classify.ts` + evidence-based reasoning; one test per class + negatives.
 - [ ] T8 — `structure/smiles.ts`: parser interface + registry, "not installed" path + tests.
 - [ ] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
 - [ ] T10 — TUI touch-ups: classify card header, guide line, completions/palette tests.

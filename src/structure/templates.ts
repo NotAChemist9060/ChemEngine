@@ -113,11 +113,21 @@ export const TEMPLATES: readonly StructureTemplate[] = [
   covalent("C3H8", "propane", "C(H)(H)(H)C(H)(H)C(H)(H)(H)"),
   covalent("C6H6", "benzene", "C%1=CC=CC=C%1"),
   covalent("C7H8", "toluene", "C%1(C(H)(H)(H))=CC=CC=C%1"),
+  // a substituted ring is the one organic shape a chain cannot be: Tier B lays
+  // C7H6O2 down as a seven-carbon chain, which is a polyketone, not benzoic acid
+  covalent("C6H6O", "phenol", "C%1(O(H))=CC=CC=C%1"),
+  covalent("C7H6O", "benzaldehyde", "C%1(C(H)=O)=CC=CC=C%1"),
+  covalent("C7H6O2", "benzoic acid", "C%1(C(=O)(O(H)))=CC=CC=C%1"),
+  covalent("C7H8O", "anisole", "C%1(O(C(H)(H)(H)))=CC=CC=C%1"),
+  covalent("C6H5NO2", "nitrobenzene", "C%1(N+(=O)O-)=CC=CC=C%1"),
+  covalent("C6H7N", "aniline", "C%1(N(H)(H))=CC=CC=C%1"),
   covalent("C2H5OH", "ethanol", "C(H)(H)(C(H)(H)(O(H)))"),
   covalent("CH3OH", "methanol", "C(H)(H)(H)O(H)"),
   covalent("C2H6O", "dimethyl ether", "C(H)(H)(H)O(C(H)(H)(H))"),
   covalent("CH3CHO", "acetaldehyde", "C(H)(H)(H)C(=O)H"),
   covalent("CH3COCH3", "acetone", "C(H)(H)(H)C(=O)C(H)(H)(H)"),
+  covalent("CH3COOCH3", "methyl acetate", "C(H)(H)(H)C(=O)OC(H)(H)(H)"),
+  covalent("CH3COOC2H5", "ethyl acetate", "C(H)(H)(H)C(=O)OC(H)(H)C(H)(H)(H)"),
   covalent("C6H12O6", "glucose (pyranose form)", "C%1(H)(O(H))C(H)(O(H))C(H)(O(H))C(H)(O(H))C(H)(C(H)(H)O(H))O%1"),
 ];
 

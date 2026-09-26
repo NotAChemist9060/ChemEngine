@@ -233,19 +233,28 @@ function buildOxoCore(
 /**
  * Spreads `charge` over the fragment's least-loaded terminal atoms — where a
  * formal charge belongs — and reports when the leftover had to sit on the
- * first atom instead.
+ * first atom instead. Hydroxyl oxygens are homes too, though only as a last
+ * resort: an O carrying a hydrogen *is* a hydroxide ion when nothing else is
+ * left to charge, and Fe(OH)3 has no other oxygen to put the charge on.
  */
 function assignFragmentCharge(mol: Molecule, charge: number): string | undefined {
   if (charge === 0) return undefined;
   const step = charge > 0 ? 1 : -1;
   let left = Math.abs(charge);
-  const homes = mol.atoms
+  const unprotonated = mol.atoms
     .filter((atom) => atom.charge === 0 && atom.hydrogens === 0 && CHARGE_HOMES.has(atom.symbol))
     .sort((a, b) => bondedOrder(mol, a.index) - bondedOrder(mol, b.index));
-  for (const atom of homes) {
+  for (const atom of unprotonated) {
     if (left === 0) break;
     atom.charge += step;
     left--;
+  }
+  for (const atom of mol.atoms) {
+    if (left === 0) break;
+    if (atom.charge === 0 && atom.hydrogens > 0 && CHARGE_HOMES.has(atom.symbol)) {
+      atom.charge += step;
+      left--;
+    }
   }
   if (left > 0) {
     mol.atoms[0]!.charge += step * left;
@@ -272,8 +281,10 @@ function anionRepeats(rest: ReadonlyMap<string, number>, wanted: number): number
 
 /**
  * The charge the anion is *known* to carry, when the formula settles it on its
- * own: a monoatomic ion (O²⁻, Cl⁻, S²⁻) or a hydride. Null when the anion is
- * polyatomic, because then the charge is whatever the cations need it to be.
+ * own: a monoatomic ion (O²⁻, Cl⁻, S²⁻), a hydride, or a run of free
+ * hydroxides — every O–H is one OH⁻, which is what puts Fe(OH)3 at Fe³⁺. Null
+ * when the anion is polyatomic, because then the charge is whatever the
+ * cations need it to be.
  */
 function knownAnionCharge(unit: ReadonlyMap<string, number>): number | null {
   const symbols = [...unit.keys()].filter((s) => s !== "H");
@@ -284,21 +295,47 @@ function knownAnionCharge(unit: ReadonlyMap<string, number>): number | null {
   if (symbols.length === 0 && (unit.get("H") ?? 0) > 0) {
     return (unit.get("H") ?? 0) * anionCharge("H");
   }
+  if (symbols.length === 1 && symbols[0] === "O") {
+    const oxygens = unit.get("O") ?? 0;
+    const hydrogens = unit.get("H") ?? 0;
+    if (hydrogens > 0 && hydrogens <= oxygens) return -hydrogens;
+  }
   return null;
 }
 
 /**
  * Charge per metal ion. When the anion's charge is known the metals have to
  * balance it, so CuO comes out Cu²⁺ + O²⁻ rather than the cuprous charge Cu
- * happens to list first. A charge no common ion of that metal can carry is not
- * invented: the preferred one is used and the imbalance gets reported.
+ * happens to list first. When nothing is known, a polyatomic anion is the only
+ * thing that can decide: `Cu(NO3)2` only divides into two nitrates if copper is
+ * +2, so the charge that makes the anion come out in whole copies wins. A
+ * charge no common ion of that metal can carry is not invented: the preferred
+ * one is used and the imbalance gets reported.
  */
-function cationChargeFor(metal: string, metalCount: number, known: number | null): number {
+function cationChargeFor(
+  metal: string,
+  metalCount: number,
+  known: number | null,
+  rest: ReadonlyMap<string, number>,
+): number {
   if (known !== null && known < 0) {
     const needed = -known / metalCount;
     if (Number.isInteger(needed) && needed > 0 && commonCharges(metal).includes(needed)) {
       return needed;
     }
+  }
+  const charges = commonCharges(metal).filter((q) => q > 0);
+  if (known === null && charges.length > 1) {
+    let best = cationCharge(metal);
+    let bestRepeats = anionRepeats(rest, -best * metalCount);
+    for (const q of charges) {
+      const repeats = anionRepeats(rest, -q * metalCount);
+      if (repeats > bestRepeats) {
+        best = q;
+        bestRepeats = repeats;
+      }
+    }
+    return best;
   }
   return cationCharge(metal);
 }
@@ -342,7 +379,9 @@ function constructSalt(
   const restSymbols = [...rest.keys()].filter((s) => s !== "H");
   const known = knownAnionCharge(rest);
   const metalCount = cations.reduce((sum, metal) => sum + (counts.get(metal) ?? 0), 0);
-  const charges = new Map(cations.map((metal) => [metal, cationChargeFor(metal, metalCount, known)]));
+  const charges = new Map(
+    cations.map((metal) => [metal, cationChargeFor(metal, metalCount, known, rest)]),
+  );
 
   let chargeTotal = 0;
   for (const metal of cations) {
@@ -452,6 +491,23 @@ function buildAnion(rest: ReadonlyMap<string, number>, hydrogenBudget: number): 
   const oxygens = rest.get("O") ?? 0;
   const others = symbols.filter((s) => s !== "O");
 
+  if (others.length === 0 && oxygens > 0 && hydrogenBudget <= oxygens) {
+    // nothing but oxygen and hydrogen left: the anions are free hydroxides,
+    // the NaOH half of sodium hydroxide
+    const mol = emptyMolecule();
+    const freeOxygens: number[] = [];
+    for (let i = 0; i < oxygens; i++) freeOxygens.push(addAtom(mol, "O"));
+    for (let i = 0; i < hydrogenBudget; i++) mol.atoms[freeOxygens[i]!]!.hydrogens = 1;
+    return {
+      molecule: mol,
+      confidence: "medium",
+      notes: [
+        `anion: ${oxygens} separate hydroxide ion(s), ` +
+          `${hydrogenBudget} of them protonated — an ion, not a bonded group`,
+      ],
+    };
+  }
+
   if (others.length === 1 && oxygens > 0) {
     const central = others[0]!;
     const count = rest.get(central) ?? 1;
@@ -546,6 +602,32 @@ function constructOrganic(counts: ReadonlyMap<string, number>, carbons: number):
   };
 }
 
+/**
+ * Tier B, an ammonium salt: `NH4+` is a cation even though nitrogen is not a
+ * metal, so `NH4OH` is ammonium plus a free hydroxide and `(NH4)2CO3` is two
+ * ammoniums plus a carbonate. Only fires when every hydrogen belongs to a
+ * nitrogen four of them to a piece, which keeps ammonia, hydrazine, urea and
+ * methylamine out of it.
+ */
+function constructAmmonium(
+  counts: ReadonlyMap<string, number>,
+  nitrogens: number,
+  hydrogens: number,
+): Construction | null {
+  const anion = buildAnion(
+    new Map([...counts].filter(([symbol]) => symbol !== "N")),
+    hydrogens - 4 * nitrogens,
+  );
+  if (anion === null) return null;
+  const mol = emptyMolecule();
+  for (let i = 0; i < nitrogens; i++) addAtom(mol, "N", { charge: 1, hydrogens: 4 });
+  const chargeNote = assignFragmentCharge(anion.molecule, -nitrogens);
+  mergeInto(mol, anion.molecule);
+  const notes = [`ammonium: ${nitrogens} NH4+ cation(s) with a constructed anion`, ...anion.notes];
+  if (chargeNote !== undefined) notes.push(chargeNote);
+  return { molecule: mol, confidence: "medium", notes };
+}
+
 /** Tier B dispatcher: picks a construction strategy from the composition. */
 function construct(counts: ReadonlyMap<string, number>): Construction | null {
   const symbols = [...counts.keys()];
@@ -571,6 +653,16 @@ function construct(counts: ReadonlyMap<string, number>): Construction | null {
 
   const metals = heavies.filter((s) => isMetal(s));
   if (metals.length > 0) return constructSalt(counts, metals, hydrogens);
+
+  // ammonium salts: four hydrogens per nitrogen is the giveaway, and any hydrogen
+  // left over has to be able to sit on one of the remaining oxygens, so NH4OH
+  // qualifies and glycine does not
+  const nitrogens = counts.get("N") ?? 0;
+  const leftover = hydrogens - 4 * nitrogens;
+  if (nitrogens > 0 && leftover >= 0 && leftover <= (counts.get("O") ?? 0)) {
+    const ammonium = constructAmmonium(counts, nitrogens, hydrogens);
+    if (ammonium !== null) return ammonium;
+  }
 
   if (counts.has("C")) return constructOrganic(counts, counts.get("C") ?? 0);
 
