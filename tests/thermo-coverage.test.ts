@@ -18,6 +18,7 @@ import { parseFormula } from "../src/core/formula.ts";
 import { reactionGibbs } from "../src/thermo/thermo.ts";
 import { formatEquation, type TermSpec } from "../src/rules/types.ts";
 import { COMBINATION_ROWS, type CombinationRow } from "../src/rules/combination.ts";
+import { SIMPLE_MATERIAL_ROWS, type SimpleMaterialRow } from "../src/rules/simpleMaterials.ts";
 import { DECOMPOSITION_ROWS } from "../src/rules/decomposition.ts";
 
 /**
@@ -64,6 +65,18 @@ describe("every curated row prices or is a documented gap", () => {
     if (row.kind !== "product") continue;
     const label = `${row.reactants[0]!.formula} + ${row.reactants[1]!.formula} -> ${row.product.formula}`;
     it(`combination: ${label}`, () => {
+      const equation = formatEquation(
+        row.reactants.map((r): TermSpec => ({ formula: r.formula, state: r.state })),
+        [{ formula: row.product.formula, state: row.product.state }],
+      );
+      checkEquation(equation, label);
+    });
+  }
+
+  for (const row of SIMPLE_MATERIAL_ROWS as readonly SimpleMaterialRow[]) {
+    if (row.kind !== "product") continue;
+    const label = `${row.reactants[0]!.formula} + ${row.reactants[1]!.formula} -> ${row.product.formula}`;
+    it(`simple materials: ${label}`, () => {
       const equation = formatEquation(
         row.reactants.map((r): TermSpec => ({ formula: r.formula, state: r.state })),
         [{ formula: row.product.formula, state: row.product.state }],

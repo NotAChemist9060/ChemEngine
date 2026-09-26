@@ -273,6 +273,29 @@ M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid f
 - [x] T15 — version 0.4.0 + README (predict/feasibility sections, milestone row, architecture tree) + plan §10. Done: `package.json`/`package-lock.json`/`VERSION` at 0.4.0 (all version-aware tests bumped with them), README gains `### predict` and `### feasibility` usage sections with real output (ranked cards, the no-reaction-with-reason case, the unknown-ΔG card, the honest phase question), the milestone table marks **M4 ✅ done (v0.4.0)**, and the architecture tree updates `rules/`/`thermo/` from planned to shipped (with `data/` now "thermo table", not "thermo table in M4"). Plan §10's M4 row rewritten from "in progress, nothing in the tree" to the full T1–T15 record — thermo table with machine-verified aqueous salts, six rules, curated tables that know their noes, engine/feasibility, the −817.90 / +131.01 pins — and "waiting on T16's final gate + push".
 - [x] T16 — full gate (`npm test` + `npx tsc --noEmit`), live-terminal check, commit + push. Done: `npm test` = **687 tests / 41 files green**, `npx tsc --noEmit` clean. Acceptance exercised live: `chem predict "CH4 O2"` → **−817.90** (the ≈−818 liquid-water pin), `chem predict "Mg O2"` → −1138.60 spontaneous, `chem feasibility "CaCO3 -> CaO + CO2"` → **+131.01, nonspontaneous** (the milestone's headline), `chem predict "N2 O2"` → *No reaction expected.* with the curated endothermic-lightning reason. Committed and pushed to `origin/main` as **`M4: prediction (rules + thermodynamics) (v0.4.0)`**.
 
+### M4.2 — Simple materials (v0.4.2)
+
+**Why:** the report `predict Na Cl` → *No reaction expected.* The curated table already held `Na + Cl2 -> NaCl`, but a bare `Cl` was read as monatomic and never matched. Elements are the most ordinary thing a person types, and the six rules were compound-shaped.
+
+**Decisions (2026-09-26, user-approved):** a **dedicated seventh rule** (`simpleMaterials`) with the element + element rows **moved out of `combination`** (one home per question; no dedupe noise); accept seven rules in `ALL_RULES`; **add sourced `FeS(s)`/`ZnS(s)`** (and the other binary solids the new rows need) to `data/thermo.json`.
+
+**Design:**
+- `src/rules/elements.ts` — the standard elemental substances: `H→H2, N→N2, O→O2, F→F2, Cl→Cl2, Br→Br2, I→I2`, everything else unchanged. A **definition** (reference states), not a guess; agrees with the thermo table's zeros; applied in the rules layer only, so `classify` is untouched.
+- `src/rules/simpleMaterials.ts` — curated **element + element → binary compound**: metal + halogen, metal + oxygen, metal + sulfur, non-metal + non-metal. First-class declines for `N2+O2` (endothermic), `Fe+O2` (two oxides), `Na/K+O2` (peroxide/superoxide), and any pair the table does not hold.
+- `combination` keeps only compound-involving joins (`CO+O2`, `SO2+O2`, `NO+O2`, `CaO+H2O`, `CaO+CO2`, `NH3+HCl`) and **skips** element + element pairs.
+- `data/thermo.json` gains solid-state values (KCl, CaCl₂, MgCl₂, AlCl₃, ZnCl₂, CuCl₂, FeCl₂, FeCl₃, NaBr, KBr, FeS, ZnS) with their aqueous ion sums where the salt is soluble.
+
+**Task table** (each gated by `npx vitest run <file>` + `npx tsc --noEmit`):
+- [x] T1 — plan doc + decision lock.
+- [x] T2 — `src/rules/elements.ts` + `tests/rules-elements.test.ts`.
+- [x] T3 — `data/thermo.json` solid halides/sulfides + aqueous ion sums; thermo-table tests stay green.
+- [x] T4 — `src/rules/simpleMaterials.ts` + `tests/rules-simple-materials.test.ts` (`Na + Cl` → `2NaCl` **−768.28**).
+- [x] T5 — re-home the element rows out of `combination`; split the combination/simple-materials suites; extend `thermo-coverage` to both tables.
+- [x] T6 — wire `simpleMaterials` into `ALL_RULES` (after `combination`); engine-level `predict("Na Cl")` matches `predict("Na Cl2")`; six → seven wording.
+- [x] T7 — REPL + one-shot CLI simple-materials tests; `predict Na Cl` example.
+- [x] T8 — version 0.4.2 + README (simple-materials example, milestone rows, layout) + this section.
+- [x] T9 — full gate + live check + push.
+
 ### M5 — Kinetics
 - `SimEngine` interface; mass-action rate laws (reversible `<=>`); adaptive-step RK4; conservation invariants (atoms/mass) checked per step; CSV/JSON export.
 - **Acceptance:** `chem simulate "2H2 + O2 -> 2H2O" --kf "0.1 L·mol⁻¹·s⁻¹" …` reproduces expected equilibrium/approach curves; invariants hold.
@@ -287,8 +310,9 @@ M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid f
 - Single displacement: `metal + salt/acid → new salt + metal/hydrogen` (reactivity series)
 - Double displacement: `salt + salt → …` (solubility rules)
 - Combination / decomposition of common compounds — as **curated reaction tables**, not generated chemistry (see M4 decision 2)
+- Simple materials: `element + element → binary compound` (curated; a bare element is read as its standard substance, `Cl → Cl2`) — added in **v0.4.2**, see §4 `### M4.2`
 
-New rules = new files implementing `ReactionRule`, no engine changes. All six ship in M4, one per task; the file table, contracts and T2–T16 breakdown are in the `### M4` section of §4.
+New rules = new files implementing `ReactionRule`, no engine changes. The six M4 rules ship one per task; the seventh (`simpleMaterials`) arrives in v0.4.2. The file table, contracts and T2–T16 breakdown are in the `### M4` section of §4.
 
 ## 6. Data provenance
 
@@ -345,3 +369,5 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M3 — structure + classification (v0.3.0) — T1–T12 done, pushed: element `group`/`period`; `structure/valence.ts`; `structure/molecule.ts` (hydrogens implicit, no H nodes); `structure/dsl.ts` + 73 curated templates; three-tier `structure/fromFormula.ts` (template → valence-built → empirical, never throws for a parseable formula); `knowledge/classify.ts` (19 classes in specificity order, evidence per class, caveats for ambiguity and for a missing structure); `structure/smiles.ts` (interface + one-slot registry, no parser); `chem classify` + card; TUI palette/completions/guide. 396 tests green (26 files), `tsc` clean. Decided along the way: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command, and two classes added beyond the planned 17 (`element`, `peroxide`) because common species otherwise fell through to `unknown`.
 - [x] M4 — prediction (rules + thermodynamics) — T1–T15 done, waiting on T16's final gate + push (v0.4.0): `data/thermo.json` (117 species, per-phase ΔGf° from NIST/CODATA, aqueous salts machine-verified against the ion values the structure layer finds in them); element reference states priced at 0; `src/thermo/thermo.ts` exact-rational `reactionGibbs` (known/unknown, terms, reasons — a missing species is never a zero); six §5 rules — combustion (element test: any C/H/O fuel), neutralization (acid+base, declines for acid+acid, base+base, ammonia), single displacement (reactivity series + curated cold-water list), double displacement (solubility-driven ion swap), combination and decomposition as **curated tables** that know their noes (N₂+O₂ declined with the endothermic-lightning reason, Fe because Fe₂O₃/Fe₃O₄ ambiguity); `ruleEngine.ts` that balances every proposal, surfaces skips, dedupes, and carries declines so no-reaction is never silence; `feasibility.ts` (spontaneous ≤ −20, nonspontaneous ≥ +20, marginal between, unknown when the table cannot price, ranked most-favourable-first with unknown last); `chem predict` + `chem feasibility` result cards; help/guide/palette/completions/examples all ship the new commands. Pinned through the engine: CH₄ combustion **−817.90**, CaCO₃ decomposition **+131.01** (mirrored by CaO+CO₂ at −131.01 in combination), CaCO₃ ≤ +131.01 → **nonspontaneous** is a headline case. 687 tests green, `tsc` clean through T14; T15 bumped v0.4.0 + README.
 - [ ] M5 — kinetics + CLI polish
+- [x] M4.1 — predict punctuation fix (v0.4.1): `predict CH4 + O2` (spaced `+`) no longer feeds a bare `+` token to the parser — `contextOf` filters standalone `+` reactant punctuation; regression tests in `rules-engine`, `repl`, `cli`. Pushed as `10b15fd`.
+- [x] M4.2 — simple materials (v0.4.2): a seventh rule, `simpleMaterials`, answers **element + element** questions. `src/rules/elements.ts` reads a bare symbol as the standard substance (`Cl → Cl2`), so `predict "Na Cl"` ≡ `predict "Na Cl2"` → `2Na(s) + Cl2(g) -> 2NaCl(s)` at **−768.28**. Curated halide/oxide/sulfide/covalent table (K/Ca/Mg/Al/Zn/Cu/Fe halides, the metal oxides, FeS/ZnS, H₂O/NH₃/CO₂/SO₂) with honest noes (`N2+O2` endothermic, `Fe+O2` two oxides, `Na/K+O2` peroxide/superoxide). The element rows moved out of `combination`, which keeps only compound-involving joins and skips element + element pairs. `data/thermo.json` grew solid-state values for the new products (sourced; aqueous ion sums where soluble). Seven rules in `ALL_RULES` (simpleMaterials after combination). README simple-materials example + milestone rows. 724 tests / 43 files green, `tsc` clean.

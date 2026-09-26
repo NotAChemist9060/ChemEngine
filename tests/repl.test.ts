@@ -56,7 +56,7 @@ describe("command runner", () => {
 
   it("general help lists commands and the version", () => {
     const h = runCommand("help", "");
-    expect(h).toContain("ChemEngine v0.4.1");
+    expect(h).toContain("ChemEngine v0.4.2");
     expect(h).toContain("balance");
     expect(h).toContain("element");
     expect(h).toContain("exit, quit");
@@ -87,7 +87,7 @@ describe("command runner", () => {
     const out = runCommand("predict", "Mg O2");
     expect(out).toContain("Predicting Mg O2.");
     expect(out).toContain("2Mg(s) + O2(g) -> 2MgO(s)");
-    expect(out).toContain("combination — spontaneous");
+    expect(out).toContain("simpleMaterials — spontaneous");
   });
 
   it("predict tolerates spaced + reactant punctuation", () => {
@@ -95,6 +95,14 @@ describe("command runner", () => {
     expect(out).toContain("Predicting CH4 + O2.");
     expect(out).toContain("combustion — spontaneous");
     expect(out).toContain("-817.90");
+  });
+
+  it("predicts simple materials: Na + Cl makes salt", () => {
+    const out = runCommand("predict", "Na Cl");
+    expect(out).toContain("Predicting Na Cl.");
+    expect(out).toContain("simpleMaterials — spontaneous");
+    expect(out).toContain("2Na(s) + Cl2(g) -> 2NaCl(s)");
+    expect(out).toContain("-768.28");
   });
 
   it("prices a user equation from the command runner", () => {

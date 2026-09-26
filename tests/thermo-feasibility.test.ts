@@ -62,7 +62,7 @@ describe("verdictOf", () => {
 describe("one explanation per candidate", () => {
   it("a spontaneous card states the verdict and the number", () => {
     const feasibility = feasibilityOf(candidateFor("Mg", "O2"));
-    expect(feasibility.rule).toBe("combination");
+    expect(feasibility.rule).toBe("simpleMaterials");
     expect(feasibility.verdict).toBe("spontaneous");
     expect(feasibility.dGrxnKj).toBeCloseTo(-1138.6, 2);
     expect(feasibility.explanation).toContain("spontaneous");
@@ -118,7 +118,7 @@ describe("ranking", () => {
     // Neither NH3+HCl nor H2+Cl2 prices (HCl(g) is absent from the table);
     // their mutual order must not wobble.
     const ranked = rankFeasibility([candidateFor("NH3", "HCl"), candidateFor("H2", "Cl2")]);
-    expect(ranked.map((f) => f.rule)).toEqual(["combination", "combination"]);
+    expect(ranked.map((f) => f.rule)).toEqual(["combination", "simpleMaterials"]);
     expect(ranked[0]!.proposed).toContain("NH4Cl");
     expect(ranked[1]!.proposed).toContain("HCl");
   });
@@ -127,6 +127,6 @@ describe("ranking", () => {
     const skip: Candidate = { rule: "clumsy", proposed: "Mg + O2 -> H2O", reasoning: "x", skipReason: "cannot be balanced" };
     const ranked = rankFeasibility([skip, candidateFor("Mg", "O2")]);
     expect(ranked).toHaveLength(1);
-    expect(ranked[0]!.rule).toBe("combination");
+    expect(ranked[0]!.rule).toBe("simpleMaterials");
   });
 });

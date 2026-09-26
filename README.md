@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.4.1                autonomous · offline · local   ║
+║  ChemEngine v0.4.2                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -157,16 +157,26 @@ Classes come in specificity order, so the first one is the most telling: `acid`,
 
 ### `predict`
 
-Runs the six reaction rules (combustion, neutralization, single displacement, double displacement, combination, decomposition) against the species you name, balances what they propose, and ranks the results most-favourable-first (the most negative ΔG° on top). Each result is a card: the verdict, the balanced equation spelled as you wrote it, the ΔG° that backs the verdict, and the rule's one-line why.
+Runs the seven reaction rules (combustion, neutralization, single displacement, double displacement, combination, simple materials, decomposition) against the species you name, balances what they propose, and ranks the results most-favourable-first (the most negative ΔG° on top). Each result is a card: the verdict, the balanced equation spelled as you wrote it, the ΔG° that backs the verdict, and the rule's one-line why.
+
+A bare element symbol is read as the substance it actually is: `Cl` means `Cl2`, `H` means `H2`, so `predict "Na Cl"` is the same question as `predict "Na Cl2"`.
 
 ```sh
 chem predict "Mg O2"
 # Predicting Mg O2.
 #
-# 1. combination — spontaneous
+# 1. simpleMaterials — spontaneous
 #    2Mg(s) + O2(g) -> 2MgO(s)
 #    spontaneous (ΔG° = -1138.60 kJ/mol at 298.15 K) — this reaction runs as written
 #    magnesium and oxygen combine into a single substance — MgO (burns with a brilliant white flame)
+
+chem predict "Na Cl"
+# Predicting Na Cl.
+#
+# 1. simpleMaterials — spontaneous
+#    2Na(s) + Cl2(g) -> 2NaCl(s)
+#    spontaneous (ΔG° = -768.28 kJ/mol at 298.15 K) — this reaction runs as written
+#    sodium and chlorine combine into a single substance — NaCl (sodium burns in chlorine)
 
 chem predict "CaCO3"
 # Predicting CaCO3.
@@ -192,7 +202,7 @@ A candidate the thermo table cannot price keeps its `unknown` verdict on the car
 
 ```sh
 chem predict "H2 Cl2"
-# 1. combination — unknown
+# 1. simpleMaterials — unknown
 #    H2(g) + Cl2(g) -> 2HCl(g)
 #    cannot be judged — no ΔGf° for HCl(g) — the table has aq, so the ΔG total is unknown
 ```
@@ -326,6 +336,8 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M2b.5 | Copy/scroll/geometry fixes (v0.2.5): native Windows `clip.exe` clipboard chain, display-cell line model (wide glyphs + ANSI keep card borders flush), true-bottom scroll + resize re-clamp | ✅ done |
 | M3 | Structure (v0.3.0): molecule graph model, curated structure templates, three-tier formula → structure builder, species classifier with structural evidence, `chem classify`, SMILES extension point | ✅ done |
 | M4 | Prediction (v0.4.0): all six reaction rules (combustion, neutralization, single/double displacement, curated combination + decomposition tables), rule engine with visible skips, ΔG ranking with spontaneous/marginal/nonspontaneous/unknown verdicts, `chem predict` + `chem feasibility` | ✅ done |
+| M4.1 | Predict punctuation fix (v0.4.1): `predict CH4 + O2` tolerates spaced `+` reactant punctuation | ✅ done |
+| M4.2 | Simple materials (v0.4.2): a seventh rule for element + element reactions, standard elemental forms (`Cl` → `Cl2`, so `Na + Cl` → `2NaCl`), curated halide/oxide/sulfide/covalent table with honest noes, sourced solid ΔGf° for the new products | ✅ done |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
 | M6 | Extensions: SMILES parser, Arrhenius/temperature, particle engine, web UI | future |
 
@@ -345,7 +357,7 @@ src/
   structure/  molecule graphs, curated templates,
               formula → structure builder, SMILES seam       [M3]
   knowledge/  species classification                         [M3]
-  rules/      six reaction rules + rule engine               [M4]
+  rules/      seven reaction rules + rule engine             [M4]
   thermo/     ΔG computation + feasibility ranking           [M4]
   sim/        kinetics + SimEngine                           [M5 - planned]
 tests/        vitest suites

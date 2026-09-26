@@ -35,7 +35,7 @@ function rule(name: string, equation: string): ReactionRule {
   };
 }
 
-describe("all six rules fire through the engine", () => {
+describe("all seven rules fire through the engine", () => {
   it("combustion: methane lands on T4's −817.90", () => {
     const { rule: name, dGrxnKj } = dGrxnOf("CH4", "O2");
     expect(name).toBe("combustion");
@@ -60,10 +60,16 @@ describe("all six rules fire through the engine", () => {
     expect(dGrxnKj).toBeCloseTo(-55.67, 2);
   });
 
-  it("combination: Mg + O2 on −1138.6", () => {
+  it("simpleMaterials: Mg + O2 on −1138.6", () => {
     const { rule: name, dGrxnKj } = dGrxnOf("Mg", "O2");
-    expect(name).toBe("combination");
+    expect(name).toBe("simpleMaterials");
     expect(dGrxnKj).toBeCloseTo(-1138.6, 2);
+  });
+
+  it("simpleMaterials: Na + Cl is read as Na + Cl2 and lands on −768.28", () => {
+    const { rule: name, dGrxnKj } = dGrxnOf("Na", "Cl");
+    expect(name).toBe("simpleMaterials");
+    expect(dGrxnKj).toBeCloseTo(-768.28, 2);
   });
 
   it("decomposition: CaCO3 on the positive +131.01", () => {
@@ -92,6 +98,13 @@ describe("the result carries what was asked and what was said", () => {
     const spaced = predict("CH4 + O2");
     const plain = predict("CH4 O2");
     expect(spaced).toEqual(plain);
+  });
+
+  it("reads a bare element as its standard substance: Na + Cl matches Na + Cl2", () => {
+    const bare = predict("Na Cl");
+    const diatomic = predict("Na Cl2");
+    expect(bare.candidates).toEqual(diatomic.candidates);
+    expect(bare.declined).toEqual(diatomic.declined);
   });
 
   it("no reaction is never silence: N2 + O2 comes back with the refused reason", () => {
@@ -149,7 +162,7 @@ describe("dedupe and skips stay visible", () => {
 
   it("every candidate carries exactly one of balanced or skipReason", () => {
     const result = predict("Mg O2", [
-      ALL_RULES[4]!, // combination proposes a clean, balanced reaction
+      ALL_RULES[5]!, // simpleMaterials proposes a clean, balanced reaction
       rule("clumsy", "Mg + O2 -> H2O"),
     ]);
     expect(result.candidates.length).toBeGreaterThanOrEqual(2);

@@ -144,9 +144,9 @@ describe("what it declines", () => {
     expect(nitrogenous.declined[0]!.reason).toContain("nitrogen");
   });
 
-  it("leaves carbon on its own to the combination rule", () => {
-    // C + O2 -> CO2 is a combination, and the rule says where it went rather
-    // than emitting a combustion of something that is not a fuel.
+  it("leaves carbon on its own to the simple-materials rule", () => {
+    // C + O2 -> CO2 is a simple-material combination, and the rule says where
+    // it went rather than emitting a combustion of something that is not a fuel.
     expect(combustion.applies(context("C", "O2"))).toBe(false);
   });
 

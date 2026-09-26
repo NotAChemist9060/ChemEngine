@@ -8,7 +8,7 @@ import { reactionGibbs } from "../thermo/thermo.ts";
 import { paint, renderBalanced, renderClassification, renderElement, renderFeasibility, renderPrediction } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
-export const VERSION = "0.4.1";
+export const VERSION = "0.4.2";
 
 /** An error meant for the user (clean message, no stack trace). */
 export class UserError extends Error {}
@@ -74,6 +74,7 @@ export const COMMANDS: CommandDef[] = [
     usage: 'predict "<reactants>"',
     examples: [
       "predict CH4 O2",
+      "predict Na Cl",
       "predict Mg O2",
       "predict CaCO3",
       "predict N2 O2",
@@ -185,6 +186,7 @@ export function renderExamples(): string {
     ["classify", "H2SO4"],
     ["element", "O"],
     ["predict", "CH4 O2"],
+    ["predict", "Na Cl"],
     ["feasibility", "CaCO3 -> CaO + CO2"],
     ["balance", "N2 + H2 <=> NH3"],
   ];

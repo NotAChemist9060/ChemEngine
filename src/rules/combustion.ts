@@ -13,7 +13,7 @@
  * produce HCl, a nitrogenous one N2, and neither product is in the table, so
  * the rule says which element stopped it instead of quietly emitting an
  * equation that is missing a product. Carbon with no hydrogen is left to the
- * combination table (`C + O2 → CO2`), which is where a textbook puts it.
+ * simple-materials table (`C + O2 → CO2`), which is where a textbook puts it.
  *
  * **The water is liquid and that is a real choice.** Combustion at 298 K is
  * quoted with H2O(l) — the value the milestone is measured against — and the
@@ -140,7 +140,7 @@ export const combustion: ReactionRule = {
       if (!elements.has("H")) {
         declined.push({
           subject,
-          reason: "carbon with no hydrogen is not a fuel — burning carbon itself is the combination rule's job (C + O2 -> CO2)",
+          reason: "carbon with no hydrogen is not a fuel — burning carbon itself is the simple-materials rule's job (C + O2 -> CO2)",
         });
         continue;
       }

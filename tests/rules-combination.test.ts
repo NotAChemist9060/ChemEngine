@@ -1,13 +1,13 @@
 /**
- * Combination, checked against the curated table.
+ * Combination, checked against the curated table of compound-involving joins.
  *
- * The classics are pinned to the table's numbers: Mg + O₂ at −1138.6,
- * H₂ + O₂ at −474.26, C + O₂ at −394.36 (T4's own pin), CaO + CO₂ at
- * −131.01 — the mirror of decomposition's +131.01, which the two entries
- * hand each other through the same ΔGf° values. The plan's negative, N₂ + O₂,
- * must come back as a decline with the endothermic reason; iron's two oxides
- * get the same treatment for ambiguity, and any pair the curated table does not
- * hold is told so plainly — "no entry" is never silence.
+ * Element + element now belongs to the simple-materials table, so this suite
+ * covers the reactions where at least one reactant is a compound: carbon
+ * monoxide burning on (−514.40), the contact process (−141.62), slaking lime
+ * (−57.94), fixing lime back to limestone (−131.01, the mirror of
+ * decomposition's +131.01). The noes that used to live here (N₂ + O₂, Fe + O₂)
+ * moved with the element rows, and the element + element pairs are skipped
+ * outright so the two tables never collide.
  */
 import { describe, expect, it } from "vitest";
 import { combination } from "../src/rules/combination.ts";
@@ -44,9 +44,9 @@ function dGrxn(...tokens: string[]): number {
 
 describe("the gate", () => {
   it("opens for any pair of species", () => {
-    expect(combination.applies(context("Mg", "O2"))).toBe(true);
-    expect(combination.applies(context("N2", "O2"))).toBe(true);
-    expect(combination.applies(context("Mg", "N2"))).toBe(true);
+    expect(combination.applies(context("CO", "O2"))).toBe(true);
+    expect(combination.applies(context("CaO", "H2O"))).toBe(true);
+    expect(combination.applies(context("NH3", "HCl"))).toBe(true);
   });
 
   it("stays quiet for a single species — decomposition's question", () => {
@@ -56,43 +56,23 @@ describe("the gate", () => {
   });
 });
 
-describe("the elements combine", () => {
-  it("burns magnesium to magnesium oxide, at the pinned value", () => {
-    const result = balanced("Mg", "O2");
-    expect(result.equation.products.map((t) => `${t.formula}(${t.state})`)).toEqual(["MgO(s)"]);
+describe("a compound joins another substance", () => {
+  it("burns carbon monoxide on to carbon dioxide", () => {
+    expect(balanced("CO", "O2").coefficients).toEqual([2, 1, 2]);
+    expect(dGrxn("CO", "O2")).toBeCloseTo(-514.4, 2);
+  });
+
+  it("runs the contact process", () => {
+    const result = balanced("SO2", "O2");
     expect(result.coefficients).toEqual([2, 1, 2]);
-    expect(dGrxn("Mg", "O2")).toBeCloseTo(-1138.6, 2);
-    expect(proposals("Mg", "O2")[0]!.reasoning).toContain("magnesium and oxygen combine");
-  });
-
-  it("makes water with a bang", () => {
-    expect(balanced("H2", "O2").coefficients).toEqual([2, 1, 2]);
-    expect(dGrxn("H2", "O2")).toBeCloseTo(-474.26, 2);
-  });
-
-  it("sprinkles salt from sodium and chlorine", () => {
-    expect(balanced("Na", "Cl2").coefficients).toEqual([2, 1, 2]);
-    expect(dGrxn("Na", "Cl2")).toBeCloseTo(-768.28, 2);
-  });
-
-  it("burns carbon to carbon dioxide, at T4's own pin", () => {
-    const result = balanced("C", "O2");
-    expect(result.coefficients).toEqual([1, 1, 1]);
-    expect(dGrxn("C", "O2")).toBeCloseTo(-394.36, 2);
-  });
-
-  it("fixes nitrogen to ammonia in the Haber shape", () => {
-    expect(balanced("N2", "H2").coefficients).toEqual([1, 3, 2]);
-    expect(dGrxn("N2", "H2")).toBeCloseTo(-32.9, 1);
+    expect(result.equation.products.map((t) => `${t.formula}(${t.state})`)).toEqual(["SO3(g)"]);
+    expect(dGrxn("SO2", "O2")).toBeCloseTo(-141.62, 2);
   });
 
   it("matches a compound reactant through its canonical spelling", () => {
     // SO2 is canonicalised to O2S internally; the entry must still be found, or
     // the contact process would silently vanish.
-    const result = balanced("SO2", "O2");
-    expect(result.coefficients).toEqual([2, 1, 2]);
-    expect(result.equation.products.map((t) => `${t.formula}(${t.state})`)).toEqual(["SO3(g)"]);
-    expect(dGrxn("SO2", "O2")).toBeCloseTo(-141.62, 2);
+    expect(proposals("SO2", "O2")).toHaveLength(1);
   });
 
   it("slakes lime and fixes it back", () => {
@@ -100,40 +80,29 @@ describe("the elements combine", () => {
     expect(dGrxn("CaO", "CO2")).toBeCloseTo(-131.01, 2);
   });
 
-  it("reads the other metal oxides", () => {
-    expect(balanced("Cu", "O2").coefficients).toEqual([2, 1, 2]);
-    expect(dGrxn("Cu", "O2")).toBeCloseTo(-259.4, 1);
-    expect(balanced("Al", "O2").coefficients).toEqual([4, 3, 2]);
-    expect(dGrxn("Al", "O2")).toBeCloseTo(-3164.6, 1);
+  it("proposes the brown gas test even though NO is unpriced", () => {
+    const result = balanced("NO", "O2");
+    expect(result.equation.products.map((t) => `${t.formula}(${t.state})`)).toEqual(["NO2(g)"]);
+    expect(reactionGibbs(result).known).toBe(false);
+  });
+});
+
+describe("element + element is left to simple materials", () => {
+  it("says nothing at all for a pair of simple substances", () => {
+    const verdict = combination.propose(context("Mg", "O2"));
+    expect(verdict.proposals).toEqual([]);
+    expect(verdict.declined).toEqual([]);
   });
 });
 
 describe("the table's honest noes", () => {
-  it("refuses the plan's negative: N2 + O2 does not combine here", () => {
-    expect(declined("N2", "O2")[0]!.reason).toContain("endothermic");
-    expect(declined("N2", "O2")[0]!.reason).toContain("deliberately omitted");
-  });
-
-  it("refuses iron because its oxide is ambiguous", () => {
-    expect(declined("Fe", "O2")[0]!.reason).toContain("Fe2O3 and Fe3O4");
-    expect(declined("Fe", "O2")[0]!.reason).toContain("does not guess");
-  });
-
-  it("tells every other pair the curated table has no entry — never silence", () => {
-    expect(declined("Mg", "N2")[0]!.reason).toBe("the curated combination table has no entry for Mg + N2");
-    expect(declined("Fe", "S")[0]!.reason).toContain("no entry");
+  it("tells every unmatched pair the curated table has no entry — never silence", () => {
+    expect(declined("CaO", "N2")[0]!.reason).toBe("the curated combination table has no entry for CaO + N2");
+    expect(declined("CO2", "H2O")[0]!.reason).toContain("no entry");
   });
 });
 
 describe("what it cannot price, it says so", () => {
-  it("proposes HCl(g) and names the missing ΔGf°", () => {
-    const result = balanced("H2", "Cl2");
-    expect(result.equation.products[0]!.formula).toBe("HCl");
-    const gibbs = reactionGibbs(result);
-    expect(gibbs.known).toBe(false);
-    expect(gibbs.missing.map((m) => m.reason).join(" ")).toContain("HCl");
-  });
-
   it("proposes the white smoke test even though HCl(g) is unpriced", () => {
     const result = balanced("NH3", "HCl");
     expect(result.equation.products.map((t) => `${t.formula}(${t.state})`)).toEqual(["NH4Cl(s)"]);

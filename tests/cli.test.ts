@@ -28,7 +28,7 @@ function consoleRun(input: string): { out: string; status: number } {
 
 describe("CLI one-shot", () => {
   it("shows help", () => {
-    expect(cli("--help")).toContain("ChemEngine v0.4.1");
+    expect(cli("--help")).toContain("ChemEngine v0.4.2");
   });
 
   it("balances methane combustion end-to-end", () => {
@@ -64,7 +64,7 @@ describe("CLI predict", () => {
   it("predicts Mg + O2 with a ranked result card", () => {
     const out = cli("predict Mg O2");
     expect(out).toContain("Predicting Mg O2.");
-    expect(out).toContain("combination — spontaneous");
+    expect(out).toContain("simpleMaterials — spontaneous");
     expect(out).toContain("2Mg(s) + O2(g) -> 2MgO(s)");
     expect(out).toContain("-1138.60 kJ/mol");
   });
@@ -84,6 +84,14 @@ describe("CLI predict", () => {
     expect(out).toContain("-817.90");
   });
 
+  it("predicts simple materials: Na + Cl makes salt", () => {
+    const out = cli("predict Na Cl");
+    expect(out).toContain("Predicting Na Cl.");
+    expect(out).toContain("simpleMaterials — spontaneous");
+    expect(out).toContain("2Na(s) + Cl2(g) -> 2NaCl(s)");
+    expect(out).toContain("-768.28");
+  });
+
   it("marks a kiln-only decomposition as nonspontaneous", () => {
     const out = cli("predict CaCO3");
     expect(out).toContain("decomposition — nonspontaneous");
@@ -99,7 +107,7 @@ describe("CLI predict", () => {
 
   it("labels an unpriced prediction unknown instead of guessing", () => {
     const out = cli("predict H2 Cl2");
-    expect(out).toContain("combination — unknown");
+    expect(out).toContain("simpleMaterials — unknown");
     expect(out).toContain("H2(g) + Cl2(g) -> 2HCl(g)");
     expect(out).toContain("cannot be judged");
     expect(out).toContain("HCl");
@@ -145,7 +153,7 @@ describe("CLI interactive console", () => {
   it("runs commands from piped stdin", () => {
     const { out, status } = consoleRun("help\nbalance CH4 + O2 -> CO2 + H2O\nexit\n");
     expect(status).toBe(0);
-    expect(out).toContain("ChemEngine v0.4.1");
+    expect(out).toContain("ChemEngine v0.4.2");
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");
   });
 
@@ -157,7 +165,7 @@ describe("CLI interactive console", () => {
   });
 
   it("prints the version on --version", () => {
-    expect(cli("--version").trim()).toBe("0.4.1");
+    expect(cli("--version").trim()).toBe("0.4.2");
   });
 
   it("lists predict and feasibility as real commands, simulate still planned", () => {
