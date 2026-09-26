@@ -118,12 +118,6 @@ function bondedOrderBetween(mol: Molecule, a: number, b: number): number {
   );
 }
 
-/** The atom `index` is bonded to, or undefined when it is bonded to none or many. */
-function onlyNeighbour(mol: Molecule, index: number): number | undefined {
-  const around = neighbors(mol, index);
-  return around.length === 1 ? around[0] : undefined;
-}
-
 /** The atom `index` shares a double bond with, when it is of `symbol`. */
 function doubleBondPartner(mol: Molecule, index: number, symbol: string): number | undefined {
   for (const bond of mol.bonds) {
@@ -135,9 +129,9 @@ function doubleBondPartner(mol: Molecule, index: number, symbol: string): number
 }
 
 interface Evidence {
-  /** O–H on a saturated carbon that is not in a ring. */
+  /** O–H on a saturated carbon outside any aromatic ring. */
   alcoholO: number[];
-  /** O–H on a ring carbon: a phenol, which is not an alcohol. */
+  /** O–H on a carbon of an aromatic ring: a phenol, which is not an alcohol. */
   phenolO: number[];
   /** O–H on an atom that is neither carbon nor oxygen: an oxoacid's hydroxyls. */
   oxoacidOH: number[];
@@ -157,7 +151,6 @@ interface Evidence {
   /** An O–O single bond, i.e. a peroxide link. */
   peroxide: boolean;
   cations: number;
-  anions: number;
   /** Free OH⁻ anions. */
   hydroxideAnions: number;
   /** Free O²⁻ anions, the kind Fe2O3 is made of. */
@@ -192,7 +185,6 @@ function inspect(mol: Molecule): Evidence {
     rings: ringCount(mol),
     peroxide: false,
     cations: 0,
-    anions: 0,
     hydroxideAnions: 0,
     oxideAnions: 0,
     simpleAnions: 0,
@@ -208,7 +200,6 @@ function inspect(mol: Molecule): Evidence {
     ev.hydrogens += atom.hydrogens;
     if (atom.charge > 0) ev.cations++;
     if (atom.charge < 0) {
-      ev.anions++;
       if (bondedOrder(mol, atom.index) > 0) {
         ev.polyatomicAnions++;
       } else if (atom.symbol !== "O") {
@@ -486,9 +477,12 @@ function classifyStructure(mol: Molecule, formula: string, waters: number): Find
     out.add("peroxide", "an O–O single bond: a peroxide link rather than separate oxide ions");
   }
   if (oxygen && otherSymbols.length > 0 && hydrogens === 0 && ev.polyatomicAnions === 0) {
+    const partner = otherSymbols.join("/");
     out.add(
       "oxide",
-      `oxygen with no hydrogen and no polyatomic anion: an oxide of ${otherSymbols.join("/")}`,
+      ev.oxideAnions > 0
+        ? `${plural(ev.oxideAnions, "free oxide ion", "free oxide ions")} with ${partner} cations: an oxide of ${partner}`
+        : `oxygen with no hydrogen and no polyatomic anion: an oxide of ${partner}`,
     );
   }
   if (ev.symbols.length === 1 && hydrogens === 0) {

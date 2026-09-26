@@ -96,6 +96,7 @@ describe("inorganic classes", () => {
   it("calls a metal oxide an oxide, not a salt", () => {
     const result = classify("Fe2O3");
     expect(result.classes).toEqual(["oxide"]);
+    expect(result.reasoning[0]).toContain("3 free oxide ions");
   });
 
   it("does not call oxygen gas an oxide of itself", () => {

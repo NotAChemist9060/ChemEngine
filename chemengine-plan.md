@@ -229,7 +229,7 @@ Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input v
 - [x] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
 - [x] T10 — TUI touch-ups: classify card header, guide line, completions/palette tests.
 - [x] T11 — version 0.3.0 + README (classify section, milestone row, architecture tree) + plan §10.
-- [ ] T12 — full gate (`npm test` + `npx tsc --noEmit`), live-terminal check, commit + push.
+- [x] T12 — full gate (`npm test` 396/26 files + `npx tsc --noEmit` clean), console check via piped stdin (`classify H2SO4` / `C2H6O` / `XeF2` all render), commit + push.
 
 ### M4 — Prediction (rules + thermodynamics)
 - `ReactionRule` interface; built-in rules: **combustion, neutralization, single displacement** (embedded reactivity series), **double displacement** (embedded solubility rules), **combination, decomposition**; `data/thermo.json` (ΔGf° ≈200 species, cited sources); ΔG ranking with explanations; explicit unknown/no-rule outcomes.
