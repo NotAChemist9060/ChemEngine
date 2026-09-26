@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.3.0                autonomous · offline · local   ║
+║  ChemEngine v0.4.0                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -155,6 +155,71 @@ chem classify C2H6O
 
 Classes come in specificity order, so the first one is the most telling: `acid`, `base`, `salt`, `metal`, `oxide`, `hydroxide`, `water`, `peroxide`, `element`, `hydrocarbon`, `alcohol`, `aldehyde`, `ketone`, `carboxylic-acid`, `ester`, `ether`, `amine`, `aromatic`, `hydrate` — or `unknown`, which is reported as an honest answer rather than a guess.
 
+### `predict`
+
+Runs the six reaction rules (combustion, neutralization, single displacement, double displacement, combination, decomposition) against the species you name, balances what they propose, and ranks the results most-favourable-first (the most negative ΔG° on top). Each result is a card: the verdict, the balanced equation spelled as you wrote it, the ΔG° that backs the verdict, and the rule's one-line why.
+
+```sh
+chem predict "Mg O2"
+# Predicting Mg O2.
+#
+# 1. combination — spontaneous
+#    2Mg(s) + O2(g) -> 2MgO(s)
+#    spontaneous (ΔG° = -1138.60 kJ/mol at 298.15 K) — this reaction runs as written
+#    magnesium and oxygen combine into a single substance — MgO (burns with a brilliant white flame)
+
+chem predict "CaCO3"
+# Predicting CaCO3.
+#
+# 1. decomposition — nonspontaneous
+#    CaCO3(s) -> CaO(s) + CO2(g)
+#    nonspontaneous (ΔG° = 131.01 kJ/mol at 298.15 K) — it needs energy input to run as written
+#    CaCO3 breaks apart into CaO and CO2 (strong heating, the way a kiln does it)
+```
+
+When nothing can happen, `predict` says so and explains why — never an empty list that reads as a confident no:
+
+```sh
+chem predict "N2 O2"
+# Predicting N2 O2.
+#
+# No reaction expected.
+#   • N2 O2 — nitrogen and oxygen do not combine in this table — forming NO is endothermic
+#     and takes lightning-scale energy, so the entry is deliberately omitted
+```
+
+A candidate the thermo table cannot price keeps its `unknown` verdict on the card and names the missing ΔGf° — it is never guessed:
+
+```sh
+chem predict "H2 Cl2"
+# 1. combination — unknown
+#    H2(g) + Cl2(g) -> 2HCl(g)
+#    cannot be judged — no ΔGf° for HCl(g) — the table has aq, so the ΔG total is unknown
+```
+
+ΔGf° values come from standard references, per phase (`H2O(l)` ≠ `H2O(g)`, which is why methane combustion reads −817.9 with liquid water and −800.8 with vapour). All thermodynamics runs fully offline.
+
+### `feasibility`
+
+Prices an equation *you* write as ΔG° and judges it: `spontaneous` (ΔG° ≤ −20 kJ/mol), `nonspontaneous` (ΔG° ≥ +20, needs energy input), `marginal` inside the ±20 band (direction can flip with conditions), or `unknown` when the table cannot price it. A species with several phases in the table (H₂O: l/g/aq) asks you to say which one; a species with exactly one phase resolves to it (so `HCl` prices as aqueous hydrochloric acid).
+
+```sh
+chem feasibility "CH4 + O2 -> CO2 + 2H2O(l)"
+# Feasibility: CH4 + 2O2 -> CO2 + 2H2O(l)
+#
+# spontaneous (ΔG° = -817.90 kJ/mol at 298.15 K) — this reaction runs as written
+
+chem feasibility "CaCO3 -> CaO + CO2"
+# Feasibility: CaCO3 -> CaO + CO2
+#
+# nonspontaneous (ΔG° = 131.01 kJ/mol at 298.15 K) — it needs energy input to run as written
+
+chem feasibility "CH4 + O2 -> CO2 + 2H2O"
+# Feasibility: CH4 + 2O2 -> CO2 + 2H2O
+#
+# cannot be judged — H2O has more than one phase (l, g, aq) — say which one, so the ΔG total is unknown
+```
+
 ## Equation syntax
 
 The parser is intentionally tolerant:
@@ -260,7 +325,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M2b.4 | Select & copy (v0.2.4): drag over results → inverse highlight → release copies via OSC 52 (file fallback), Esc clears | ✅ done |
 | M2b.5 | Copy/scroll/geometry fixes (v0.2.5): native Windows `clip.exe` clipboard chain, display-cell line model (wide glyphs + ANSI keep card borders flush), true-bottom scroll + resize re-clamp | ✅ done |
 | M3 | Structure (v0.3.0): molecule graph model, curated structure templates, three-tier formula → structure builder, species classifier with structural evidence, `chem classify`, SMILES extension point | ✅ done |
-| M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
+| M4 | Prediction (v0.4.0): all six reaction rules (combustion, neutralization, single/double displacement, curated combination + decomposition tables), rule engine with visible skips, ΔG ranking with spontaneous/marginal/nonspontaneous/unknown verdicts, `chem predict` + `chem feasibility` | ✅ done |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
 | M6 | Extensions: SMILES parser, Arrhenius/temperature, particle engine, web UI | future |
 
@@ -269,7 +334,7 @@ See the plan document (architecture, milestone details, decisions) for the full 
 ## Layout
 
 ```
-data/         embedded JSON data (periodic table; thermo table in M4)
+data/         embedded JSON data (periodic table; thermo table)
 src/
   util/       rational + units                               [M1]
   core/       elements, formula, equation, balance           [M1]
@@ -280,8 +345,8 @@ src/
   structure/  molecule graphs, curated templates,
               formula → structure builder, SMILES seam       [M3]
   knowledge/  species classification                         [M3]
-  rules/      reaction rule set + engine                     [M4 - planned]
-  thermo/     ΔG computation + feasibility ranking           [M4 - planned]
+  rules/      six reaction rules + rule engine               [M4]
+  thermo/     ΔG computation + feasibility ranking           [M4]
   sim/        kinetics + SimEngine                           [M5 - planned]
 tests/        vitest suites
 chem / chem.cmd   local launchers (no global install needed)

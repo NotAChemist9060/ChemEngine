@@ -56,7 +56,7 @@ describe("command runner", () => {
 
   it("general help lists commands and the version", () => {
     const h = runCommand("help", "");
-    expect(h).toContain("ChemEngine v0.3.0");
+    expect(h).toContain("ChemEngine v0.4.0");
     expect(h).toContain("balance");
     expect(h).toContain("element");
     expect(h).toContain("exit, quit");
