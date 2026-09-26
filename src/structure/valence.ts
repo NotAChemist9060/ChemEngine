@@ -110,11 +110,23 @@ export function preferredValence(symbol: string): number {
   return 0;
 }
 
-/** Ascending list of valence states; empty when the element is unknown. */
+/**
+ * Ascending list of valence states; empty when the element is unknown.
+ *
+ * A metal's oxidation states count as valences too, because that is what an
+ * oxo species needs: MnO₄⁻ is Mn(VII), four oxygens taking 2+2+2+1 bonds, and
+ * Cr₂O₇²⁻ is two Cr(VI). Without them a builder sees only Mn(IV) and leaves
+ * permanganate with four single bonds.
+ */
 export function valenceStates(symbol: string): number[] {
   const el = tryGetElement(symbol);
   if (!el) return [];
-  return [...(VALENCE_STATES[el.symbol] ?? [preferredValence(el.symbol)])].sort((a, b) => a - b);
+  const curated = VALENCE_STATES[el.symbol];
+  if (curated !== undefined) return [...curated].sort((a, b) => a - b);
+  const oxidation = commonCharges(el.symbol).filter((charge) => charge > 0);
+  const states = new Set<number>([preferredValence(el.symbol), ...oxidation]);
+  states.delete(0);
+  return [...states].sort((a, b) => a - b);
 }
 
 /** True when the element can take that many covalent bonds. */
