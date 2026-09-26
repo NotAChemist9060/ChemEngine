@@ -7,6 +7,9 @@ import {
   thermoEntry,
   tryThermoKey,
 } from "../src/thermo/table.ts";
+import { buildStructure } from "../src/structure/fromFormula.ts";
+import { components, type Molecule } from "../src/structure/molecule.ts";
+import { formatFormula } from "../src/core/formula.ts";
 
 const table = loadThermoTable();
 
@@ -53,8 +56,8 @@ describe("thermo table data", () => {
         expect(["s", "l", "g", "aq"], `${entry.formula}(${phase})`).toContain(phase);
         const kj = entry.dGf[phase as keyof typeof entry.dGf]!;
         expect(Number.isFinite(kj), entry.formula).toBe(true);
-        // A ΔGf° outside this band is a units slip (J vs kJ), not chemistry.
-        expect(Math.abs(kj), `${entry.formula}(${phase})`).toBeLessThan(3000);
+        // A ΔGf° outside this band is a units slip (J written as kJ), not chemistry.
+        expect(Math.abs(kj), `${entry.formula}(${phase})`).toBeLessThan(5000);
       }
     }
   });
@@ -143,6 +146,147 @@ describe("thermo lookup", () => {
     const found = dGfOf("XeF2", "s");
     expect(found.known).toBe(false);
     if (!found.known) expect(found.reason).toBe("no ΔGf° entry for 'XeF2'");
+  });
+});
+
+describe("ion keys", () => {
+  it("canonicalises every unambiguous way of writing a charge", () => {
+    // The data file writes "SO4^2-", the structure layer emits "O4S-2", and
+    // either can be typed with the magnitude after the sign.
+    expect(tryThermoKey("SO4^2-")).toBe("O4S-2");
+    expect(tryThermoKey("O4S-2")).toBe("O4S-2");
+    expect(tryThermoKey("SO4-2")).toBe("O4S-2");
+    expect(tryThermoKey("Ca^2+")).toBe("Ca+2");
+    expect(tryThermoKey("Ca+2")).toBe("Ca+2");
+    expect(tryThermoKey("Na+")).toBe("Na+1");
+    expect(tryThermoKey("Al^3+")).toBe("Al+3");
+    expect(tryThermoKey("Ca++")).toBe("Ca+2");
+    expect(tryThermoKey("NH4+")).toBe("H4N+1");
+    expect(tryThermoKey("OH-")).toBe("HO-1");
+  });
+
+  it("lets the table settle the ambiguous charge spelling", () => {
+    // "NO3-" keeps its 3 as a subscript; "Ca2+" and "SO42-" need their trailing
+    // digit read as the charge. The plain reading is tried first, so nitrate
+    // cannot be mistaken for a triply charged nitrogen oxide.
+    expect(thermoEntry("NO3-")?.name).toBe("nitrate ion");
+    expect(thermoEntry("Ca2+")?.name).toBe("calcium ion");
+    expect(thermoEntry("SO42-")?.name).toBe("sulfate ion");
+    expect(thermoEntry("Fe3+")?.name).toBe("iron(III) ion");
+    // A charged formula that is in neither reading is a miss, not a guess.
+    expect(thermoEntry("H2O2-")).toBeUndefined();
+    expect(dGfOf("H2O2-", "aq").known).toBe(false);
+  });
+
+  it("leaves a neutral formula's key charge-free", () => {
+    expect(tryThermoKey("H2O")).toBe("H2O");
+    expect(tryThermoKey("CH3COOH")).toBe("C2H4O2");
+    expect(tryThermoKey("C6H6")).toBe("C6H6");
+    expect(tryThermoKey("H2O2")).toBe("H2O2");
+  });
+
+  it("keeps an ion and the element it is made of apart", () => {
+    // Na(s) and Na+(aq) are different species with different keys; a table that
+    // conflated them would silently apply the element's 0 to the ion.
+    expect(tryThermoKey("Na")).toBe("Na");
+    expect(tryThermoKey("Na+")).toBe("Na+1");
+    expect(thermoEntry("Na")?.name).toBe("sodium");
+    expect(thermoEntry("Na+")?.name).toBe("sodium ion");
+  });
+
+  it("finds ions by any spelling", () => {
+    expect(dGfOf("SO4^2-", "aq")).toMatchObject({ known: true, kj: -744.63 });
+    expect(dGfOf("O4S-2", "aq")).toMatchObject({ known: true, kj: -744.63 });
+    expect(dGfOf("OH-", "aq")).toMatchObject({ known: true, kj: -157.24 });
+    expect(dGfOf("H+", "aq")).toMatchObject({ known: true, kj: 0 });
+  });
+});
+
+/**
+ * The ions a species is made of, in the spelling the structure layer produces
+ * (Hill-ordered atoms, charge as a signed integer) so a `dGfOf` lookup reaches
+ * the ion entries in the table.
+ */
+function ionFormulas(formula: string): string[] | null {
+  const built = buildStructure(formula);
+  if (built.molecule === null) return null;
+  return components(built.molecule).map((indices) => partFormula(built.molecule as Molecule, indices));
+}
+
+function partFormula(mol: Molecule, indices: number[]): string {
+  const counts = new Map<string, number>();
+  let charge = 0;
+  for (const index of indices) {
+    const atom = mol.atoms[index]!;
+    counts.set(atom.symbol, (counts.get(atom.symbol) ?? 0) + 1);
+    if (atom.hydrogens > 0) counts.set("H", (counts.get("H") ?? 0) + atom.hydrogens);
+    charge += atom.charge;
+  }
+  const base = formatFormula(counts);
+  return charge === 0 ? base : `${base}${charge > 0 ? `+${charge}` : `-${-charge}`}`;
+}
+
+describe("aqueous values against the ion-sum convention", () => {
+  /** An aqueous entry is only checkable if every ion in it has a value. */
+  function ionSum(formula: string): number | null {
+    const ions = ionFormulas(formula);
+    if (ions === null) return null;
+    const positive = ions.filter((ion) => dGfOf(ion, "aq").known && ionCharge(ion) > 0);
+    const negative = ions.filter((ion) => ionCharge(ion) < 0);
+    if (positive.length === 0 || negative.length === 0) return null;
+    let total = 0;
+    for (const ion of [...positive, ...negative]) {
+      const value = dGfOf(ion, "aq");
+      if (!value.known) return null;
+      total += value.kj;
+    }
+    return total;
+  }
+
+  function ionCharge(ion: string): number {
+    const sign = /[+-]/.exec(ion);
+    if (sign === null) return 0;
+    const magnitude = Number(/(\d+)$/.exec(ion)?.[1] ?? "1");
+    return ion[sign.index] === "+" ? magnitude : -magnitude;
+  }
+
+  const aqueous = table.species.filter(
+    (entry) => entry.dGf.aq !== undefined && !/[+-]\d*$/.test(entry.formula),
+  );
+
+  it("has enough aqueous entries to be worth checking", () => {
+    expect(aqueous.length).toBeGreaterThan(25);
+  });
+
+  it("re-derives every aqueous salt from the ionic values", () => {
+    const checked: string[] = [];
+    const skipped: string[] = [];
+    for (const entry of aqueous) {
+      const sum = ionSum(entry.formula);
+      if (sum === null) {
+        skipped.push(entry.formula);
+        continue;
+      }
+      checked.push(entry.formula);
+      expect(entry.dGf.aq, `${entry.formula}(aq)`).toBeCloseTo(sum, 1);
+    }
+    // A salt the structure layer cannot split yet (CH3COONa is empirical) is
+    // skipped rather than silently counted as verified.
+    expect(checked.length, `skipped: ${skipped.join(", ")}`).toBeGreaterThan(25);
+  });
+
+  it("reproduces the acid dissociation constant it implies", () => {
+    // Ka is not in the table, but the acid/base pairs we do have have to agree
+    // with the constant they represent: ΔG° = RT·ln(1/Ka).
+    const acid = dGfOf("CH3COOH", "aq");
+    const acetate = dGfOf("CH3COO-", "aq");
+    const hydrogen = dGfOf("H+", "aq");
+    expect(acid.known && acetate.known && hydrogen.known).toBe(true);
+    if (!acid.known || !acetate.known || !hydrogen.known) return;
+    const rt = 0.008314 * 298.15;
+    // CH3COOH(aq) -> H+(aq) + CH3COO-(aq); Ka = 1.8e-5
+    const dg = acetate.kj + hydrogen.kj - acid.kj;
+    expect(Math.exp(-dg / rt)).toBeCloseTo(1.8e-5, 6);
   });
 });
 

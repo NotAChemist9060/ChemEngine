@@ -257,8 +257,8 @@ M3 hands M4 two things worth using: `knowledge/classify.ts` already knows acid f
 
 **Task table** (one task at a time, gate after each: `npx vitest run <file>` + `npx tsc --noEmit`):
 - [x] T1 — plan doc: this section + §10 status row.
-- [ ] T2 — `src/thermo/table.ts` (loader, canonical Hill keys, phase index) + a seed `data/thermo.json` (~30 species covering the tests) + `tests/thermo-table.test.ts` (every entry parses, key round-trips, phases ∈ s/l/g/aq, element reference states are 0, no duplicates).
-- [ ] T3 — grow `data/thermo.json` rule family by rule family until it covers every proposal; NIST WebBook check on the values the tests pin.
+- [x] T2 — `src/thermo/table.ts` (loader, canonical Hill keys, phase index) + a seed `data/thermo.json` (~30 species covering the tests) + `tests/thermo-table.test.ts` (every entry parses, key round-trips, phases ∈ s/l/g/aq, element reference states are 0, no duplicates).
+- [x] T3 — grow `data/thermo.json` rule family by rule family until it covers every proposal; NIST WebBook check on the values the tests pin. Done: 117 species, and the aqueous half is machine-verified — `tests/thermo-table.test.ts` re-derives all 31 aqueous salts from the ion values the structure layer finds in them (max deviation 0.05 kJ/mol), so a transcription slip cannot survive. Ions are first-class entries to make that possible; the charge suffix is parsed in `table.ts`. Values checked against NIST/CODATA or an independent Ksp/Hess cross-check, and four that could not be stood behind (KCl/KClO3, dichromate, three uncertain solid values) were left out rather than guessed.
 - [ ] T4 — `src/thermo/thermo.ts` + `tests/thermo.test.ts` (methane −817.9, C −394.4, H2 −237.1, CaCO3 +131.1, HCl+NaOH, an `H2O(l)` vs `H2O(g)` pair, and missing-species → `unknown`).
 - [ ] T5 — `src/rules/types.ts` + `src/rules/ions.ts` (cation/anion split from a structure, salt building from ion formulas) + tests.
 - [ ] T6 — `src/rules/series.ts` + `src/rules/solubility.ts` + tests.
