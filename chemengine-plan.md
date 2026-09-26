@@ -225,10 +225,10 @@ Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input v
 - [x] T5 — `structure/templates.ts`: Tier A curated structures + registry, each round-trips to its own formula + tests.
 - [x] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, chain/ring construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
 - [x] T7 — `knowledge/classify.ts` + evidence-based reasoning; one test per class + negatives.
-- [ ] T8 — `structure/smiles.ts`: parser interface + registry, "not installed" path + tests.
-- [ ] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
-- [ ] T10 — TUI touch-ups: classify card header, guide line, completions/palette tests.
-- [ ] T11 — version 0.3.0 + README (classify section, milestone row, architecture tree) + plan §10.
+- [x] T8 — `structure/smiles.ts`: parser interface + registry, "not installed" path + tests.
+- [x] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
+- [x] T10 — TUI touch-ups: classify card header, guide line, completions/palette tests.
+- [x] T11 — version 0.3.0 + README (classify section, milestone row, architecture tree) + plan §10.
 - [ ] T12 — full gate (`npm test` + `npx tsc --noEmit`), live-terminal check, commit + push.
 
 ### M4 — Prediction (rules + thermodynamics)
@@ -304,6 +304,6 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2b.3 — anti-blink v0.2.3 (enable Ink incremental rendering: per-keystroke writes drop to just the input row, no full-frame erase+redraw) — 138 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10
 - [x] M2b.4 — select & copy v0.2.4 (drag-select over results → release copies via OSC 52, `~/.chemengine/last-selection.txt` fallback; selection-aware incremental rendering; per-cell highlight parity) — 198 tests green, `tsc` clean, pushed; live check done → its three findings shipped as M2b.5
 - [x] M2b.5 — copy/geometry/display-cell fixes v0.2.5 (native `clip.exe` clipboard chain with method-naming toasts; `display.ts` grapheme/display-column line model so wide glyphs and ANSI keep card borders flush; marker-aware `scrollGeometry` reaching the true bottom + `clamp-scroll` on resize) — 220 tests green (18 files), `tsc` clean, live-verified, pushed
-- [ ] M3 — structure + classification (v0.3.0) — in progress: T1 done (sprint planned, design + task table above); T2–T12 pending. Decided: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command.
+- [x] M3 — structure + classification (v0.3.0) — T1–T11 done: element `group`/`period`; `structure/valence.ts`; `structure/molecule.ts` (hydrogens implicit, no H nodes); `structure/dsl.ts` + 73 curated templates; three-tier `structure/fromFormula.ts` (template → valence-built → empirical, never throws for a parseable formula); `knowledge/classify.ts` (19 classes in specificity order, evidence per class, caveats for ambiguity and for a missing structure); `structure/smiles.ts` (interface + one-slot registry, no parser); `chem classify` + card; TUI palette/completions/guide. 396 tests green (26 files), `tsc` clean. Decided along the way: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command, and two classes added beyond the planned 17 (`element`, `peroxide`) because common species otherwise fell through to `unknown`.
 - [ ] M4 — prediction (rules + thermodynamics)
 - [ ] M5 — kinetics + CLI polish

@@ -44,7 +44,7 @@ function renderFrame(rows: number, cols: number, guideOn: boolean, results: read
   const frame = box(
     { flexDirection: "column", height: view },
     lay.showBanner
-      ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: "0.2.5" }))
+      ? box({ height: BANNER_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(Banner, { version: "0.3.0" }))
       : null,
     lay.showInfo
       ? box({ height: INFO_ROWS, flexShrink: 0, flexDirection: "column" }, createElement(EngineInfo, { elementCount: 118 }))
@@ -60,7 +60,7 @@ function renderFrame(rows: number, cols: number, guideOn: boolean, results: read
             ),
             lay.showGuide
               ? createElement(Guide, {
-                  sections: guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 }),
+                  sections: guideSections({ version: "0.3.0", commands: ["balance", "element"], elementCount: 118 }),
                   width: lay.guideWidth,
                 })
               : null,
@@ -75,8 +75,8 @@ function renderFrame(rows: number, cols: number, guideOn: boolean, results: read
 
 describe("TUI presentation layer", () => {
   it("renders the banner with the version", () => {
-    const out = render(createElement(Banner, { version: "0.2.5" }));
-    expect(out).toContain("ChemEngine v0.2.5");
+    const out = render(createElement(Banner, { version: "0.3.0" }));
+    expect(out).toContain("ChemEngine v0.3.0");
     expect(out).toContain("autonomous · offline · local");
     expect(out).toContain("╔"); // double border
   });
@@ -88,7 +88,7 @@ describe("TUI presentation layer", () => {
   });
 
   it("renders the guide panel with sections", () => {
-    const sections = guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.3.0", commands: ["balance", "element"], elementCount: 118 });
     const out = render(createElement(Guide, { sections, width: 40 }));
     expect(out).toContain("GUIDE");
     expect(out).toContain("Commands");

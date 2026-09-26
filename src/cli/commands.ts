@@ -5,7 +5,7 @@ import { classify, tryClassify } from "../knowledge/classify.ts";
 import { paint, renderBalanced, renderClassification, renderElement } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
-export const VERSION = "0.2.5";
+export const VERSION = "0.3.0";
 
 /** An error meant for the user (clean message, no stack trace). */
 export class UserError extends Error {}

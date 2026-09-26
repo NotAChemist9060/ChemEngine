@@ -427,7 +427,7 @@ describe("TUI layout math", () => {
 
 describe("TUI guide content", () => {
   it("builds sections from the command registry and engine facts", () => {
-    const sections = guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.3.0", commands: ["balance", "element"], elementCount: 118 });
     const titles = sections.map((s) => s.title);
     expect(titles).toEqual(["Commands", "Keys", "Engine"]);
     const commands = sections[0]!.lines.join("\n");
@@ -438,12 +438,12 @@ describe("TUI guide content", () => {
     expect(keys).toContain("PgUp/Dn · wheel scroll");
     const engine = sections[2]!.lines.join("\n");
     expect(engine).toContain("118 elements embedded");
-    expect(engine).toContain("v0.2.5");
+    expect(engine).toContain("v0.3.0");
   });
 
   it("keeps every guide line within the narrowest panel inner width", () => {
     // guideWidth floors at 30 → inner = 30 − border 2 − paddingX 2 = 26 cols.
-    const sections = guideSections({ version: "0.2.5", commands: ["balance", "element"], elementCount: 118 });
+    const sections = guideSections({ version: "0.3.0", commands: ["balance", "element"], elementCount: 118 });
     for (const s of sections) {
       for (const line of s.lines) expect(line.length).toBeLessThanOrEqual(26);
     }

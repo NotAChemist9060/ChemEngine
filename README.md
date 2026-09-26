@@ -4,7 +4,7 @@ Autonomous, fully offline chemical simulation engine.
 
 ChemEngine takes chemistry *inputs* — formulas, equations, species — and does the math. Eventually it will also *propose* reactions from reactants alone, judge feasibility via Gibbs free energy, and simulate reaction kinetics. Everything runs locally; all knowledge is embedded data + code, no network access.
 
-**Implemented today:** formula parsing, equation parsing, exact equation balancing, periodic table queries, dimensional analysis (mol/L/s), a beautiful Ink-based console TUI (hotkeys, command palette, history), plus a plain REPL + one-shot CLI and a scriptable API.
+**Implemented today:** formula parsing, equation parsing, exact equation balancing, periodic table queries, dimensional analysis (mol/L/s), molecular structure from a formula (curated structures, valence-driven construction, honest fallback), species classification with structural evidence, a beautiful Ink-based console TUI (hotkeys, command palette, history), plus a plain REPL + one-shot CLI and a scriptable API.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.2.5                autonomous · offline · local   ║
+║  ChemEngine v0.3.0                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -92,6 +92,7 @@ Edit `config.json` (or delete it to reset). Commands also work **non-interactive
 ```sh
 chem balance "CH4 + O2 -> CO2 + H2O"    # balanced equation + stoichiometry
 chem element O                          # periodic table row
+chem classify H2SO4                     # species class + the evidence for it
 chem --help | -h                        # help
 chem --version | -v                     # version
 ```
@@ -124,6 +125,36 @@ chem element O
 #   O   Oxygen         atomic #8  15.999 g/mol
 ```
 
+### `classify`
+
+Names what a species *is*, and shows the structural evidence it read off the molecule rather than a bare label:
+
+```sh
+chem classify H2SO4
+#   H2SO4 — sulfuric acid                     98.072 g/mol
+#
+#   acid
+#     2 hydroxyls on oxygen bonded to S: an oxoacid, ionisable in water
+#
+#  Structure:  template · high confidence · 5 atoms in 1 particle
+#     curated structure: sulfuric acid
+
+chem classify NaOH
+#   NaOH — sodium hydroxide                   39.997 g/mol
+#   …
+#   base
+#     1 free OH⁻ anion: it gives hydroxide in water
+#   …
+#   also hydroxide
+
+chem classify C2H6O
+#   …
+#   Limits:
+#     C2H6O fits ethanol and dimethyl ether — the formula alone cannot choose
+```
+
+Classes come in specificity order, so the first one is the most telling: `acid`, `base`, `salt`, `metal`, `oxide`, `hydroxide`, `water`, `peroxide`, `element`, `hydrocarbon`, `alcohol`, `aldehyde`, `ketone`, `carboxylic-acid`, `ester`, `ether`, `amine`, `aromatic`, `hydrate` — or `unknown`, which is reported as an honest answer rather than a guess.
+
 ## Equation syntax
 
 The parser is intentionally tolerant:
@@ -136,6 +167,34 @@ The parser is intentionally tolerant:
 | `(NH4)2SO4`, `Al2(SO4)3` | groups and nested groups in formulas |
 | `CuSO4·5H2O` | hydrates (· separator) |
 | `NaCl(s)`, `AgNO3(aq)` | physical states `(s) (l) (g) (aq)` |
+
+## Structure and classification
+
+A formula says which atoms are present and how many; it does not say how they are joined. `chem classify` therefore works in three tiers, and always tells you which one it used:
+
+| Tier | Source | Example | Confidence |
+|---|---|---|---|
+| A | a curated structure, hand-written in a small structural DSL | `H2SO4`, `C6H6`, `BaCl2` | high |
+| B | built from valences: chains, rings, oxo cores, ion pairs | `C7H16`, `Cu(NO3)2`, `Fe(OH)3` | medium / low |
+| C | the empirical formula and nothing more | `XeF2` | low |
+
+```ts
+import { buildStructure } from "./src/structure/fromFormula.ts";
+import { classify } from "./src/knowledge/classify.ts";
+
+const build = buildStructure("CuSO4·5H2O");
+build.source;      // "template"
+build.confidence;  // "high"
+build.notes;       // ["hydrate: 2 formula part(s), 5 water molecule(s) among them", "curated structure: copper(II) sulfate", …]
+
+classify("NH4OH").classes;     // ["base", "hydroxide"]
+classify("XeF2").caveats;       // ["no connectivity could be built, so only the formula itself was classified"]
+```
+
+- `buildStructure` **never throws** for a formula the parser accepts. When no structure can be built it returns `molecule: null`, `source: "empirical"`, and a note saying why — the limits are surfaced, never guessed.
+- `classify` reads groups of atoms in the graph (`–COOH`, `C=O` with an `–O–C`, a six-membered ring with three double bonds), so its evidence is structural and its `reasoning[i]` line explains `classes[i]`.
+- Curated structures are keyed by formula, and a formula can fit more than one of them. That is not hidden: `C2H6O` is reported as ambiguous in `caveats`, because a formula genuinely cannot choose between ethanol and dimethyl ether.
+- `structure/smiles.ts` is the seam for connectivity you type rather than count. M3 ships the `SmilesParser` interface and a one-slot registry (`setSmilesParser`) and **no parser**, so `readSmiles` says so out loud rather than guessing. A parser returns the same `Molecule` graph the formula path builds, hydrogens implicit on the atoms, and `formulaFromSmiles` hands the result straight to the classifier.
 
 ## Using as a library
 
@@ -200,7 +259,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M2b.3 | Anti-blink (v0.2.3): enable Ink incremental rendering — per-keystroke writes drop to just the input row (no full-frame erase+redraw) | ✅ done |
 | M2b.4 | Select & copy (v0.2.4): drag over results → inverse highlight → release copies via OSC 52 (file fallback), Esc clears | ✅ done |
 | M2b.5 | Copy/scroll/geometry fixes (v0.2.5): native Windows `clip.exe` clipboard chain, display-cell line model (wide glyphs + ANSI keep card borders flush), true-bottom scroll + resize re-clamp | ✅ done |
-| M3 | Structure: molecule graphs, species classifier, SMILES extension point | planned |
+| M3 | Structure (v0.3.0): molecule graph model, curated structure templates, three-tier formula → structure builder, species classifier with structural evidence, `chem classify`, SMILES extension point | ✅ done |
 | M4 | Prediction: reaction rules + ΔG ranking with reasoning | planned |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
 | M6 | Extensions: SMILES parser, Arrhenius/temperature, particle engine, web UI | future |
@@ -218,8 +277,9 @@ src/
               rendering, suggestions                         [M1-2]
   tui/        Ink TUI: app, state reducer, keymap,
               completions, palette, persist, components      [M2b]
-  structure/  molecule graphs, smiles interface              [M3 - planned]
-  knowledge/  species classification                         [M3 - planned]
+  structure/  molecule graphs, curated templates,
+              formula → structure builder, SMILES seam       [M3]
+  knowledge/  species classification                         [M3]
   rules/      reaction rule set + engine                     [M4 - planned]
   thermo/     ΔG computation + feasibility ranking           [M4 - planned]
   sim/        kinetics + SimEngine                           [M5 - planned]
