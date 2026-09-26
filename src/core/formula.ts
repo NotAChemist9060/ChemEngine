@@ -35,6 +35,34 @@ export function molarMassFromCounts(counts: Map<string, number>): number {
   return mass;
 }
 
+/**
+ * Canonical formula text in Hill order: carbon first, then hydrogen, then
+ * every other element alphabetically. Elements with count 0 are dropped and
+ * count 1 omits the "1". With no carbon the order is purely alphabetical.
+ *
+ * The structure layer uses this as the round-trip target for graphs it builds
+ * (`formulaOf(mol)` → parse → same counts), which is why it never emits
+ * parentheses, hydrates or charges.
+ */
+export function formatFormula(counts: ReadonlyMap<string, number>): string {
+  const present = [...counts].filter(([, n]) => n > 0).map(([sym]) => sym);
+  const ordered = present.includes("C")
+    ? ["C", "H", ...present.filter((s) => s !== "C" && s !== "H").sort()]
+    : [...present].sort();
+  let out = "";
+  for (const sym of ordered) {
+    const n = counts.get(sym) ?? 0;
+    if (n <= 0) continue;
+    out += n === 1 ? sym : `${sym}${n}`;
+  }
+  return out;
+}
+
+/** Formula text of an element-count map, with `·`-separated hydrates. */
+export function formatFormulaParts(parts: ReadonlyArray<ReadonlyMap<string, number>>): string {
+  return parts.map((p) => formatFormula(p)).join("·");
+}
+
 function parseUnitGroup(group: string, allowLeadingCoefficient: boolean): FormulaResult {
   if (!group) throw new Error("empty formula unit");
   if (!allowLeadingCoefficient && /^[0-9]/.test(group)) {
