@@ -1,0 +1,1 @@
+Copy isnt actually copying, there seems to be a bug where frame of output has some symbols out of place, like walls pieces being thrown to the left of frames position. autoscroll is bugged again, i cant seem to scroll all the way down to see messages. its probably a geometry problem, tho im not sure.

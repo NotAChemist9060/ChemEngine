@@ -192,9 +192,44 @@ Environment: Windows + PowerShell (no `head`; use `Select-Object -First/-Last`).
 **Task 10 — real-terminal checklist → then M3:**
 Run `node src/cli/index.ts` (or `npm run cli`) on a real TTY and verify: input visible with guide + 4+ tall outputs; input stays visible after resizing down/up; PgUp/PgDn + wheel scroll only the center; click positions the input cursor; autoscroll follows newest output; `^G` toggles guide; typing/history/`^C` unaffected. Then resume **M3 — Structure & classification** per §4.
 
-### M3 — Structure & classification
-- Molecule connectivity graph; `fromFormula` construction via valence rules (chain/ring hydrocarbons, functional groups, ion pairs); `smiles.ts` interface (stub, extension point); species classifier.
-- **Acceptance:** `chem classify "H2SO4"` → `acid` + reasoning; classifier tests per class.
+### M3 — Structure & classification (v0.3.0)
+
+**Decisions (2026-09-26, user-approved):**
+1. **Curated templates + heuristic fallback** for connectivity — Tier A exact structures for common species, Tier B valence-driven construction (chains/rings/ion pairs), Tier C empirical fallback. No pure-heuristic-only build, no formula-only classifier.
+2. **SMILES = interface + registry only** — a parser seam, not an implementation. `parseSmiles()` reports "not installed" until a parser is registered.
+3. **No `chem structure` command** — structure facts (fragments, bonds, source, confidence) render inside the `classify` card. Keeps the M3 command surface to one new command.
+4. **Version 0.3.0** at the end of the milestone.
+
+**Design (layers L1/L2, pure functions, no new runtime deps):**
+
+| File | Role |
+|---|---|
+| `src/structure/molecule.ts` | `Atom`/`Bond`/`Molecule` graph model + helpers (`neighbors`, `degree`, `components`, `formulaOf`) |
+| `src/structure/valence.ts` | allowed valence states per element + `isMetal`/`isHalogen`/`isAlkali`/`isChalcogen` predicates |
+| `src/structure/templates.ts` | Tier A curated exact structures, registry keyed by normalized formula |
+| `src/structure/fromFormula.ts` | Tier B/C builder: hydrate split, ion pairs, chain/ring construction, empirical fallback |
+| `src/structure/smiles.ts` | `SMILESParser` interface + `setSmilesParser` registry (extension point) |
+| `src/knowledge/classify.ts` | `Classify(formula) → { primary, classes[], reasoning[] }` |
+
+**Core contract — `StructureBuild`:** `{ formula, molecule \| null, source: "template" \| "constructed" \| "empirical", confidence: "high" \| "medium" \| "low", notes: string[] }`. It **never throws** for a formula the parser accepts; an unknown structure surfaces as `empirical` + a note, per §3 ("unknowns are surfaced, never guessed").
+
+**Classes:** acid, base, salt, metal, oxide, hydroxide, water, hydrocarbon, alcohol, aldehyde, ketone, carboxylic-acid, ester, ether, amine, aromatic, hydrate. Reasoning strings cite the structural evidence (e.g. "4 H bound to O; 2 S=O + 2 S–OH"), never a bare label.
+
+**Acceptance:** `chem classify "H2SO4"` → `acid` + reasoning; one classifier test per class plus negatives; every new module has tests; `npm test` + `npx tsc --noEmit` green; live-terminal `classify` check; committed + pushed as `M3: … (v0.3.0)`.
+
+**Task table:**
+- [ ] T1 — plan doc: this section + §10 status row + triage the stray `BUG REPORT 4-42-25-9-2026.txt` (all three bugs fixed in v0.2.5).
+- [ ] T2 — `data/elements.json` += `group`/`period` (additive optional fields; `scaffold.test.ts` untouched) + `groupOf`/`periodOf`; new `tests/elements.test.ts`.
+- [ ] T3 — `structure/valence.ts`: valence states + metal/halogen/alkali/chalcogen predicates + tests.
+- [ ] T4 — `structure/molecule.ts`: graph model, helpers, `formulaOf` round-trip, multi-fragment salts + tests.
+- [ ] T5 — `structure/templates.ts`: Tier A curated structures + registry, each round-trips to its own formula + tests.
+- [ ] T6 — `structure/fromFormula.ts`: hydrate split, ion pairs, chain/ring construction, empirical fallback (`CH4`, `C6H12O6`, `Ca(OH)2`, `CuSO4·5H2O`, `NH4Cl`) + tests.
+- [ ] T7 — `knowledge/classify.ts` + evidence-based reasoning; one test per class + negatives.
+- [ ] T8 — `structure/smiles.ts`: parser interface + registry, "not installed" path + tests.
+- [ ] T9 — CLI `chem classify` + result card; help/examples/guide/`PLANNED` updates + cli/repl tests.
+- [ ] T10 — TUI touch-ups: classify card header, guide line, completions/palette tests.
+- [ ] T11 — version 0.3.0 + README (classify section, milestone row, architecture tree) + plan §10.
+- [ ] T12 — full gate (`npm test` + `npx tsc --noEmit`), live-terminal check, commit + push.
 
 ### M4 — Prediction (rules + thermodynamics)
 - `ReactionRule` interface; built-in rules: **combustion, neutralization, single displacement** (embedded reactivity series), **double displacement** (embedded solubility rules), **combination, decomposition**; `data/thermo.json` (ΔGf° ≈200 species, cited sources); ΔG ranking with explanations; explicit unknown/no-rule outcomes.
@@ -269,6 +304,6 @@ The deliverable stays pure TypeScript + embedded JSON, fully offline. No Wolfram
 - [x] M2b.3 — anti-blink v0.2.3 (enable Ink incremental rendering: per-keystroke writes drop to just the input row, no full-frame erase+redraw) — 138 tests green, `tsc` clean, pushed; live-terminal check folded into Task 10
 - [x] M2b.4 — select & copy v0.2.4 (drag-select over results → release copies via OSC 52, `~/.chemengine/last-selection.txt` fallback; selection-aware incremental rendering; per-cell highlight parity) — 198 tests green, `tsc` clean, pushed; live check done → its three findings shipped as M2b.5
 - [x] M2b.5 — copy/geometry/display-cell fixes v0.2.5 (native `clip.exe` clipboard chain with method-naming toasts; `display.ts` grapheme/display-column line model so wide glyphs and ANSI keep card borders flush; marker-aware `scrollGeometry` reaching the true bottom + `clamp-scroll` on resize) — 220 tests green (18 files), `tsc` clean, live-verified, pushed
-- [ ] M3 — structure + classification
+- [ ] M3 — structure + classification (v0.3.0) — in progress: T1 done (sprint planned, design + task table above); T2–T12 pending. Decided: curated templates + heuristic fallback, SMILES interface+registry only, `classify` as the only new command.
 - [ ] M4 — prediction (rules + thermodynamics)
 - [ ] M5 — kinetics + CLI polish
