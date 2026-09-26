@@ -83,6 +83,30 @@ describe("command runner", () => {
     expect(() => runCommand("classify", "")).toThrow(/usage: classify/);
   });
 
+  it("predicts from the command runner", () => {
+    const out = runCommand("predict", "Mg O2");
+    expect(out).toContain("Predicting Mg O2.");
+    expect(out).toContain("2Mg(s) + O2(g) -> 2MgO(s)");
+    expect(out).toContain("combination — spontaneous");
+  });
+
+  it("prices a user equation from the command runner", () => {
+    const out = runCommand("feasibility", "CaCO3 -> CaO + CO2");
+    expect(out).toContain("Feasibility: CaCO3 -> CaO + CO2");
+    expect(out).toContain("nonspontaneous");
+    expect(out).toContain("131.01");
+  });
+
+  it("predict needs reactants, feasibility needs an equation", () => {
+    expect(() => runCommand("predict", "")).toThrow(/usage: predict/);
+    expect(() => runCommand("feasibility", "")).toThrow(/usage: feasibility/);
+  });
+
+  it("per-command help covers the new commands", () => {
+    expect(runCommand("help", "predict")).toContain("Predict likely reactions from reactants");
+    expect(runCommand("help", "feasibility")).toContain("Price an equation and judge whether it runs");
+  });
+
   it("examples run live demos", () => {
     const out = runCommand("examples", "");
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");

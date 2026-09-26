@@ -37,6 +37,8 @@ export interface Feasibility {
   rule: string;
   /** The equation as the rule wrote it, phases included. */
   proposed: string;
+  /** The balanced equation that was priced. */
+  balanced: BalancedEquation;
   /** The rule's one-line why. */
   reasoning: string;
   /** ΔG_rxn°, when every term priced; absent exactly when `verdict` is `unknown`. */
@@ -84,6 +86,7 @@ export function feasibilityOf(candidate: Candidate & { balanced: BalancedEquatio
   const feasibility: Feasibility = {
     rule: candidate.rule,
     proposed: candidate.proposed,
+    balanced: candidate.balanced,
     reasoning: candidate.reasoning,
     verdict: verdictOf(gibbs),
     explanation: explain(gibbs),

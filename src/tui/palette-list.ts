@@ -19,8 +19,7 @@ export function paletteItems(): PaletteItem[] {
     { name: "exit", summary: "Leave ChemEngine" },
   ];
   const planned: PaletteItem[] = [
-    { name: "predict", summary: "Predict reactions from reactants" },
-    { name: "simulate", summary: "Simulate reaction kinetics" },
+    { name: "simulate", summary: "Simulate reaction kinetics  [M5 planned]" },
   ];
   return [
     ...meta,

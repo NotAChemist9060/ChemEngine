@@ -5,6 +5,9 @@ import type { ElementData } from "../core/elements.ts";
 import type { Classification, SpeciesClass } from "../knowledge/classify.ts";
 import { components } from "../structure/molecule.ts";
 import { findTemplates } from "../structure/templates.ts";
+import { explain, type Feasibility, type Verdict } from "../thermo/feasibility.ts";
+import type { ReactionGibbs } from "../thermo/thermo.ts";
+import type { Candidate, Declined } from "../rules/types.ts";
 
 type Style = "bold" | "dim" | "red" | "green" | "yellow" | "cyan";
 
@@ -125,4 +128,114 @@ export function renderClassification(result: Classification): string {
 
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? `1 ${one}` : `${n} ${many}`;
+}
+
+/*
+ * ── Reaction cards ─────────────────────────────────────────────────────────
+ * The `predict` and `feasibility` commands' output. Cards show the balanced
+ * equation *spelled the way it was written* (MgO, not the Hill-order MgO — and
+ * for a salt, NaCl, not ClNa), the ΔG-backed verdict, and the rule's one-line
+ * why. When piped (tests, scripts) paint() strips the colors and the layout is
+ * plain text; on a TTY the verdict gets its own color.
+ */
+
+const VERDICT_COLORS: Record<Verdict, Style> = {
+  spontaneous: "green",
+  marginal: "cyan",
+  nonspontaneous: "yellow",
+  unknown: "red",
+};
+
+/** The arrow the engine writes; feasibility accepts <=> too. */
+const ARROW = /(<=>|->)/;
+
+function sideParts(text: string): { left: string[]; right: string[] } | undefined {
+  const m = ARROW.exec(text);
+  if (m === null) return undefined;
+  return {
+    left: text
+      .slice(0, m.index)
+      .split("+")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0),
+    right: text
+      .slice(m.index + m[0].length)
+      .split("+")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0),
+  };
+}
+
+/**
+ * A balanced equation rendered with the author's spelling of each species and
+ * the balancer's smallest-integer coefficients. Falls back to the canonical
+ * render when the text cannot be split side-by-side, so a malformed proposal
+ * still prints something truthful.
+ */
+/** A leading coefficient already written in a term ("2H2O") must not double up. */
+const WRITTEN_COEFFICIENT = /^\d+\s*\/\s*\d+|^\.\d+|^\d+(?:\.\d+)?/;
+
+export function renderFriendlyBalanced(text: string, balanced: BalancedEquation): string {
+  const parts = sideParts(text);
+  const n = balanced.equation.reactants.length;
+  if (parts === undefined || parts.left.length !== n || parts.right.length !== balanced.equation.products.length) {
+    return formatBalancedEquation(balanced);
+  }
+  const side = (friendly: string[], start: number): string =>
+    friendly
+      .map((f, i) => {
+        const k = balanced.coefficients[start + i]!;
+        const bare = f.replace(WRITTEN_COEFFICIENT, "").trim();
+        return k === 1 ? bare : `${k}${bare}`;
+      })
+      .join(" + ");
+  const arrow = balanced.equation.reversible ? "<=>" : "->";
+  return `${side(parts.left, 0)} ${arrow} ${side(parts.right, n)}`;
+}
+
+/** One numbered candidate card: the verdict atop the balanced equation. */
+function renderCandidateCard(index: number, f: Feasibility): string {
+  return [
+    `${index}. ${paint(f.rule, "cyan")} — ${paint(f.verdict, VERDICT_COLORS[f.verdict])}`,
+    `   ${renderFriendlyBalanced(f.proposed, f.balanced)}`,
+    `   ${f.explanation}`,
+    `   ${f.reasoning}`,
+  ].join("\n");
+}
+
+/**
+ * The `predict` result card. When something can happen the cards are ranked
+ * most-favourable-first, each with the number and the reason; when nothing
+ * can, the rules' declines are printed so "no reaction" always says *why*
+ * instead of being an empty list. Rule-bug skips (unbalanceable proposals)
+ * are shown, not hidden, and merged duplicates are counted.
+ */
+export function renderPrediction(
+  input: string,
+  ranked: readonly Feasibility[],
+  declined: readonly Declined[],
+  duplicatesDropped: number,
+  skips: readonly Candidate[],
+): string {
+  const lines: string[] = [`${paint("Predicting", "bold")} ${input}.`, ""];
+  if (ranked.length === 0) {
+    lines.push(paint("No reaction expected.", "bold"));
+    for (const d of declined) lines.push(`  ${paint("•", "dim")} ${d.subject} — ${d.reason}`);
+  } else {
+    ranked.forEach((f, i) => lines.push(renderCandidateCard(i + 1, f)));
+  }
+  for (const skip of skips) {
+    lines.push("");
+    lines.push(`  ${paint(`[${skip.rule}] skip`, "yellow")} ${skip.proposed} — ${skip.skipReason}`);
+  }
+  if (duplicatesDropped > 0) {
+    lines.push(`  (${duplicatesDropped} duplicate proposal${duplicatesDropped === 1 ? "" : "s"} merged)`);
+  }
+  return lines.join("\n");
+}
+
+/** The `feasibility` card: the priced equation and the verdict with its number. */
+export function renderFeasibility(text: string, balanced: BalancedEquation, gibbs: ReactionGibbs): string {
+  const header = `${paint("Feasibility", "bold")}: ${renderFriendlyBalanced(text, balanced)}`;
+  return `${header}\n\n${explain(gibbs)}`;
 }

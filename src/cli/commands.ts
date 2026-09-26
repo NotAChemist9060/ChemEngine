@@ -2,7 +2,10 @@ import { balanceEquation } from "../core/balance.ts";
 import { parseEquation } from "../core/equation.ts";
 import { getElement } from "../core/elements.ts";
 import { classify, tryClassify } from "../knowledge/classify.ts";
-import { paint, renderBalanced, renderClassification, renderElement } from "./render.ts";
+import { predict } from "../rules/ruleEngine.ts";
+import { rankFeasibility } from "../thermo/feasibility.ts";
+import { reactionGibbs } from "../thermo/thermo.ts";
+import { paint, renderBalanced, renderClassification, renderElement, renderFeasibility, renderPrediction } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
 export const VERSION = "0.3.0";
@@ -65,10 +68,45 @@ export const COMMANDS: CommandDef[] = [
       return renderClassification(classify(a));
     },
   },
+  {
+    name: "predict",
+    summary: "Predict likely reactions from reactants",
+    usage: 'predict "<reactants>"',
+    examples: [
+      "predict CH4 O2",
+      "predict Mg O2",
+      "predict CaCO3",
+      "predict N2 O2",
+    ],
+    run: (argString) => {
+      const a = argString.trim();
+      if (!a) throw new UserError('usage: predict "<reactants>"  (e.g. predict "CH4 O2")');
+      const result = predict(a);
+      const ranked = rankFeasibility(result.candidates);
+      const skips = result.candidates.filter((c) => c.skipReason !== undefined);
+      return renderPrediction(a, ranked, result.declined, result.duplicatesDropped, skips);
+    },
+  },
+  {
+    name: "feasibility",
+    summary: "Price an equation and judge whether it runs",
+    usage: 'feasibility "<equation>"',
+    examples: [
+      "feasibility CH4 + O2 -> CO2 + 2H2O(l)",
+      "feasibility CaCO3 -> CaO + CO2",
+      "feasibility H2 + Cl2 -> HCl",
+      "feasibility N2 + 3H2 -> 2NH3",
+    ],
+    run: (argString) => {
+      const a = argString.trim();
+      if (!a) throw new UserError('usage: feasibility "<equation>"  (e.g. feasibility "CH4 + O2 -> CO2 + 2H2O(l)")');
+      const balanced = balanceEquation(parseEquation(a));
+      return renderFeasibility(a, balanced, reactionGibbs(balanced));
+    },
+  },
 ];
 
 const PLANNED: ReadonlyArray<readonly [string, string]> = [
-  ["predict", "Predict reactions from reactants  [M4 planned]"],
   ["simulate", "Simulate reaction kinetics  [M5 planned]"],
 ];
 
@@ -146,6 +184,8 @@ export function renderExamples(): string {
     ["balance", "CH4 + O2 -> CO2 + H2O"],
     ["classify", "H2SO4"],
     ["element", "O"],
+    ["predict", "CH4 O2"],
+    ["feasibility", "CaCO3 -> CaO + CO2"],
     ["balance", "N2 + H2 <=> NH3"],
   ];
   for (const [cmd, args] of demos) {

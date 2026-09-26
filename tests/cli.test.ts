@@ -60,6 +60,80 @@ describe("CLI one-shot", () => {
   });
 });
 
+describe("CLI predict", () => {
+  it("predicts Mg + O2 with a ranked result card", () => {
+    const out = cli("predict Mg O2");
+    expect(out).toContain("Predicting Mg O2.");
+    expect(out).toContain("combination — spontaneous");
+    expect(out).toContain("2Mg(s) + O2(g) -> 2MgO(s)");
+    expect(out).toContain("-1138.60 kJ/mol");
+  });
+
+  it("lands methane combustion on the pinned −817.90", () => {
+    const out = cli("predict CH4 O2");
+    expect(out).toContain("Predicting CH4 O2.");
+    expect(out).toContain("combustion — spontaneous");
+    expect(out).toContain("CH4(g) + 2O2(g) -> CO2(g) + 2H2O(l)");
+    expect(out).toContain("-817.90");
+  });
+
+  it("marks a kiln-only decomposition as nonspontaneous", () => {
+    const out = cli("predict CaCO3");
+    expect(out).toContain("decomposition — nonspontaneous");
+    expect(out).toContain("CaCO3(s) -> CaO(s) + CO2(g)");
+    expect(out).toContain("131.01");
+  });
+
+  it("says no reaction is expected for N2 + O2, with the reason, never silence", () => {
+    const out = cli("predict N2 O2");
+    expect(out).toContain("No reaction expected.");
+    expect(out).toContain("endothermic");
+  });
+
+  it("labels an unpriced prediction unknown instead of guessing", () => {
+    const out = cli("predict H2 Cl2");
+    expect(out).toContain("combination — unknown");
+    expect(out).toContain("H2(g) + Cl2(g) -> 2HCl(g)");
+    expect(out).toContain("cannot be judged");
+    expect(out).toContain("HCl");
+  });
+
+  it("requires reactants", () => {
+    expect(() => cli("predict")).toThrow();
+  });
+});
+
+describe("CLI feasibility", () => {
+  it("prices a user equation and judges it", () => {
+    const out = cli(`feasibility "CH4 + O2 -> CO2 + 2H2O(l)"`);
+    expect(out).toContain("Feasibility: CH4 + 2O2 -> CO2 + 2H2O(l)");
+    expect(out).toContain("spontaneous");
+    expect(out).toContain("-817.90");
+  });
+
+  it("asks for the phase when a species has several", () => {
+    const out = cli(`feasibility "CH4 + O2 -> CO2 + 2H2O"`);
+    expect(out).toContain("cannot be judged");
+    expect(out).toContain("H2O has more than one phase");
+  });
+
+  it("names the missing ΔGf° when a phase is genuinely absent", () => {
+    const out = cli(`feasibility "H2 + Cl2 -> HCl(g)"`);
+    expect(out).toContain("cannot be judged");
+    expect(out).toContain("no ΔGf° for HCl(g)");
+  });
+
+  it("resolves a single-phase species to its only phase", () => {
+    const out = cli(`feasibility "H2 + Cl2 -> HCl"`);
+    expect(out).toContain("spontaneous");
+    expect(out).toContain("-262.46");
+  });
+
+  it("requires an equation", () => {
+    expect(() => cli("feasibility")).toThrow();
+  });
+});
+
 describe("CLI interactive console", () => {
   it("runs commands from piped stdin", () => {
     const { out, status } = consoleRun("help\nbalance CH4 + O2 -> CO2 + H2O\nexit\n");
@@ -68,8 +142,22 @@ describe("CLI interactive console", () => {
     expect(out).toContain("CH4 + 2O2 -> CO2 + 2H2O");
   });
 
+  it("runs predict from piped stdin", () => {
+    const { out, status } = consoleRun("predict CH4 O2\nexit\n");
+    expect(status).toBe(0);
+    expect(out).toContain("Predicting CH4 O2.");
+    expect(out).toContain("2H2O(l)");
+  });
+
   it("prints the version on --version", () => {
     expect(cli("--version").trim()).toBe("0.3.0");
+  });
+
+  it("lists predict and feasibility as real commands, simulate still planned", () => {
+    const out = cli("--help");
+    expect(out).toContain("predict  Predict likely reactions from reactants");
+    expect(out).toContain("feasibility  Price an equation and judge whether it runs");
+    expect(out).toContain("simulate  Simulate reaction kinetics  [M5 planned]");
   });
 
   it("suggests commands on typos", () => {

@@ -326,6 +326,8 @@ describe("TUI completions", () => {
     expect(candidatesFor("")).toContain("balance");
     expect(candidatesFor("bal")).toEqual(expect.arrayContaining(["balance"]));
     expect(candidatesFor("clas")).toEqual(["classify"]);
+    expect(candidatesFor("pre")).toContain("predict");
+    expect(candidatesFor("feas")).toEqual(["feasibility"]);
   });
 
   it("completes later words with element symbols", () => {
@@ -433,6 +435,7 @@ describe("TUI guide content", () => {
     const commands = sections[0]!.lines.join("\n");
     expect(commands).toContain("balance");
     expect(commands).toContain("element");
+    expect(commands).toContain("simulate — M5 planned");
     const keys = sections[1]!.lines.join("\n");
     expect(keys).toContain("^G show/hide this guide");
     expect(keys).toContain("PgUp/Dn · wheel scroll");
