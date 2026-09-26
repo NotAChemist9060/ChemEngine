@@ -29,7 +29,7 @@
  */
 import type { PhysicalState } from "../core/equation.ts";
 import { buildSalt, ionFromFormula, splitIons, type Ion } from "./ions.ts";
-import { solubilityOf } from "./solubility.ts";
+import { saltPhase, solubilityOf } from "./solubility.ts";
 import {
   formatEquation,
   parseSpeciesInput,
@@ -121,11 +121,6 @@ function phaseOf(species: SpeciesInput): PhysicalState {
  * `insoluble` means it comes out of solution as a solid; anything else — soluble
  * or unjudged — is written dissolved.
  */
-function saltPhase(salt: string): PhysicalState {
-  const verdict = solubilityOf(parseSpeciesInput(salt));
-  return verdict?.solubility === "insoluble" ? "s" : DISSOLVED;
-}
-
 /** How a salt reads on a card, with the numbers behind the formula. */
 function describeSalt(salt: string): string {
   const verdict = solubilityOf(parseSpeciesInput(salt));

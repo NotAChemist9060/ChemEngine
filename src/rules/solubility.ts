@@ -26,8 +26,10 @@
  * rather than picking the answer that makes the example work (§3, §7).
  */
 import { groupOf } from "../core/elements.ts";
+import type { PhysicalState } from "../core/equation.ts";
 import { splitIons, type Ion } from "./ions.ts";
 import type { SpeciesInput } from "./types.ts";
+import { parseSpeciesInput } from "./types.ts";
 
 /** What a salt does when it is put in water. */
 export type Solubility = "soluble" | "insoluble";
@@ -180,4 +182,18 @@ export function solubilityGap(species: SpeciesInput): string {
   const looked = inspect(species);
   if (looked.ok) return `no solubility rule covers the ${looked.anion.formula} ion`;
   return looked.gap;
+}
+
+/**
+ * The phase a salt takes in a reaction equation.
+ *
+ * Solid when the solubility rules say it precipitates, otherwise dissolved. A
+ * salt the rules cannot judge is written `(aq)` — a reaction gives a dissolved
+ * salt unless the table says otherwise, a stated limit shared by every rule
+ * that builds salts (neutralisation, single and double displacement), so they
+ * can never hand out different phases for the same salt.
+ */
+export function saltPhase(formula: string): PhysicalState {
+  const verdict = solubilityOf(parseSpeciesInput(formula));
+  return verdict?.solubility === "insoluble" ? "s" : "aq";
 }
