@@ -8,7 +8,7 @@ import { reactionGibbs } from "../thermo/thermo.ts";
 import { paint, renderBalanced, renderClassification, renderElement, renderFeasibility, renderPrediction } from "./render.ts";
 import { suggest } from "./suggest.ts";
 
-export const VERSION = "0.4.2";
+export const VERSION = "0.4.3";
 
 /** An error meant for the user (clean message, no stack trace). */
 export class UserError extends Error {}

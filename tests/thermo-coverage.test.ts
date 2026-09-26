@@ -19,6 +19,8 @@ import { reactionGibbs } from "../src/thermo/thermo.ts";
 import { formatEquation, type TermSpec } from "../src/rules/types.ts";
 import { COMBINATION_ROWS, type CombinationRow } from "../src/rules/combination.ts";
 import { SIMPLE_MATERIAL_ROWS, type SimpleMaterialRow } from "../src/rules/simpleMaterials.ts";
+import { redox } from "../src/rules/redox.ts";
+import { parseSpeciesInput } from "../src/rules/types.ts";
 import { DECOMPOSITION_ROWS } from "../src/rules/decomposition.ts";
 
 /**
@@ -93,6 +95,39 @@ describe("every curated row prices or is a documented gap", () => {
         row.products.map((p): TermSpec => ({ formula: p.formula, state: p.state })),
       );
       checkEquation(equation, label);
+    });
+  }
+});
+
+/**
+ * The redox rule is pattern-based rather than a table, so its coverage is
+ * checked over the reactions it actually proposes for a representative input
+ * set. Every proposal must price or hit a documented gap - the same guarantee
+ * the curated tables get.
+ */
+describe("the redox rule's proposals price or are documented gaps", () => {
+  const inputs: ReadonlyArray<readonly string[]> = [
+    ["CuO", "H2"],
+    ["CuO", "C"],
+    ["CuO", "CO"],
+    ["Fe2O3", "CO"],
+    ["ZnO", "CO"],
+    ["Cl2", "NaBr"],
+    ["Cl2", "KBr"],
+    ["Br2", "NaI"],
+    ["Fe", "H2O"],
+    ["Zn", "H2O"],
+    ["Mg", "H2O"],
+  ];
+  for (const tokens of inputs) {
+    const label = tokens.join(" + ");
+    it(`redox: ${label}`, () => {
+      const ctx = { input: label, species: tokens.map(parseSpeciesInput) };
+      const verdict = redox.propose(ctx);
+      expect(verdict.proposals.length, `${label}: expected a proposal`).toBeGreaterThan(0);
+      for (const proposal of verdict.proposals) {
+        checkEquation(proposal.equation, label);
+      }
     });
   }
 });

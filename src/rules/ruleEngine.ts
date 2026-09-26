@@ -14,7 +14,7 @@
  * decomposition in the curated table for CH4" — instead of printing an empty
  * list that reads as a confident no.
  *
- * `predict` runs the seven §5 rules in one fixed order. The order only matters
+ * `predict` runs the eight §5 rules in one fixed order. The order only matters
  * when two of them propose the same equation, and first-wins is as good as any
  * choice; it is documented so the attribution cannot drift.
  */
@@ -37,9 +37,10 @@ import { singleDisplacement } from "./singleDisplacement.ts";
 import { doubleDisplacement } from "./doubleDisplacement.ts";
 import { combination } from "./combination.ts";
 import { simpleMaterials } from "./simpleMaterials.ts";
+import { redox } from "./redox.ts";
 import { decomposition } from "./decomposition.ts";
 
-/** The seven §5 rules, in the order they fire. */
+/** The eight §5 rules, in the order they fire. */
 export const ALL_RULES: readonly ReactionRule[] = [
   combustion,
   neutralization,
@@ -47,6 +48,7 @@ export const ALL_RULES: readonly ReactionRule[] = [
   doubleDisplacement,
   combination,
   simpleMaterials,
+  redox,
   decomposition,
 ];
 

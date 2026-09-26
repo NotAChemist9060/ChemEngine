@@ -37,7 +37,7 @@ Run `chem` with **no arguments** in a terminal to get the full-screen console:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║  ChemEngine v0.4.2                autonomous · offline · local   ║
+║  ChemEngine v0.4.3                autonomous · offline · local   ║
 ╚══════════════════════════════════════════════════════════════════╝
  ╭──────────────────────────────────────────────────────────────────╮
  │ #1 $ balance CH4 + O2 -> CO2 + H2O                              │
@@ -157,9 +157,29 @@ Classes come in specificity order, so the first one is the most telling: `acid`,
 
 ### `predict`
 
-Runs the seven reaction rules (combustion, neutralization, single displacement, double displacement, combination, simple materials, decomposition) against the species you name, balances what they propose, and ranks the results most-favourable-first (the most negative ΔG° on top). Each result is a card: the verdict, the balanced equation spelled as you wrote it, the ΔG° that backs the verdict, and the rule's one-line why.
+Runs the eight reaction rules (combustion, neutralization, single displacement, double displacement, combination, simple materials, redox, decomposition) against the species you name, balances what they propose, and ranks the results most-favourable-first (the most negative ΔG° on top). Each result is a card: the verdict, the balanced equation spelled as you wrote it, the ΔG° that backs the verdict, and the rule's one-line why.
 
 A bare element symbol is read as the substance it actually is: `Cl` means `Cl2`, `H` means `H2`, so `predict "Na Cl"` is the same question as `predict "Na Cl2"`.
+
+Redox reactions are covered too — a metal oxide reduced by hydrogen, carbon or carbon monoxide, a halogen displacing one below it in the order F > Cl > Br > I, or a metal oxidised by steam:
+
+```sh
+chem predict "CuO H2"
+# Predicting CuO H2.
+#
+# 1. redox — spontaneous
+#    CuO(s) + H2(g) -> Cu(s) + H2O(l)
+#    spontaneous (ΔG° = -107.43 kJ/mol at 298.15 K) — this reaction runs as written
+#    CuO is reduced by hydrogen — copper is freed and the hydrogen becomes H2O
+
+chem predict "Cl2 NaBr"
+# Predicting Cl2 NaBr.
+#
+# 1. redox — spontaneous
+#    Cl2(g) + 2NaBr(aq) -> 2NaCl(aq) + Br2(l)
+#    spontaneous (ΔG° = -54.54 kJ/mol at 298.15 K) — this reaction runs as written
+#    Cl is above Br in the halogen order, so it displaces Br from NaBr
+```
 
 ```sh
 chem predict "Mg O2"
@@ -338,6 +358,7 @@ npm run cli -- ...  # run the CLI (same thing as `chem`)
 | M4 | Prediction (v0.4.0): all six reaction rules (combustion, neutralization, single/double displacement, curated combination + decomposition tables), rule engine with visible skips, ΔG ranking with spontaneous/marginal/nonspontaneous/unknown verdicts, `chem predict` + `chem feasibility` | ✅ done |
 | M4.1 | Predict punctuation fix (v0.4.1): `predict CH4 + O2` tolerates spaced `+` reactant punctuation | ✅ done |
 | M4.2 | Simple materials (v0.4.2): a seventh rule for element + element reactions, standard elemental forms (`Cl` → `Cl2`, so `Na + Cl` → `2NaCl`), curated halide/oxide/sulfide/covalent table with honest noes, sourced solid ΔGf° for the new products | ✅ done |
+| M4.3 | Redox (v0.4.3): an eighth rule — metal-oxide reduction by H2/C/CO, halogen displacement, and metal + steam, with honest declines (electrolysis-only oxides, reverse halogens) | ✅ done |
 | M5 | Kinetics: SimEngine, adaptive RK4, CSV/JSON export | planned |
 | M6 | Extensions: SMILES parser, Arrhenius/temperature, particle engine, web UI | future |
 
@@ -357,7 +378,7 @@ src/
   structure/  molecule graphs, curated templates,
               formula → structure builder, SMILES seam       [M3]
   knowledge/  species classification                         [M3]
-  rules/      seven reaction rules + rule engine             [M4]
+  rules/      eight reaction rules + rule engine             [M4]
   thermo/     ΔG computation + feasibility ranking           [M4]
   sim/        kinetics + SimEngine                           [M5 - planned]
 tests/        vitest suites

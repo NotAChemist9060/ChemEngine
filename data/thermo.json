@@ -16,6 +16,7 @@
     { "formula": "N2", "name": "nitrogen", "source": "standard reference state (definition)", "dGf": { "g": 0 } },
     { "formula": "Cl2", "name": "chlorine", "source": "standard reference state (definition)", "dGf": { "g": 0 } },
     { "formula": "Br2", "name": "bromine", "source": "standard reference state (definition)", "dGf": { "l": 0 } },
+    { "formula": "I2", "name": "iodine", "source": "standard reference state (definition)", "dGf": { "s": 0 } },
     { "formula": "C", "name": "carbon (graphite)", "source": "standard reference state (definition)", "dGf": { "s": 0 } },
     { "formula": "S", "name": "sulfur (rhombic)", "source": "standard reference state (definition)", "dGf": { "s": 0 } },
     { "formula": "P", "name": "phosphorus (white)", "source": "standard reference state (definition)", "dGf": { "s": 0 } },
@@ -49,6 +50,7 @@
     { "formula": "CuO", "name": "copper(II) oxide", "source": "CRC Handbook 84th ed.", "dGf": { "s": -129.7 } },
     { "formula": "ZnO", "name": "zinc oxide", "source": "CRC Handbook 84th ed.", "dGf": { "s": -320.5 } },
     { "formula": "BaO", "name": "barium oxide", "source": "CRC Handbook 84th ed.", "dGf": { "s": -520.3 } },
+    { "formula": "Fe3O4", "name": "iron(II,III) oxide (magnetite)", "source": "CRC Handbook 84th ed.", "dGf": { "s": -1015.4 } },
 
     { "formula": "CH4", "name": "methane", "source": "NIST-JANAF (CODATA review)", "dGf": { "g": -50.72 } },
     { "formula": "C2H6", "name": "ethane", "source": "NIST-JANAF (CODATA review)", "dGf": { "g": -32.82 } },
@@ -101,6 +103,8 @@
     { "formula": "AlCl3", "name": "aluminium chloride", "source": "aqueous value is the ion sum (H+(aq) = 0); solid from CRC Handbook 84th ed.", "dGf": { "aq": -877.39, "s": -628.8 } },
     { "formula": "NaBr", "name": "sodium bromide", "source": "aqueous value is the ion sum (H+(aq) = 0); solid from CRC Handbook 84th ed.", "dGf": { "aq": -365.86, "s": -349.0 } },
     { "formula": "KBr", "name": "potassium bromide", "source": "aqueous value is the ion sum (H+(aq) = 0); solid from CRC Handbook 84th ed.", "dGf": { "aq": -386.46, "s": -380.7 } },
+    { "formula": "NaI", "name": "sodium iodide", "source": "aqueous value is the ion sum (H+(aq) = 0)", "dGf": { "aq": -313.47 } },
+    { "formula": "KI", "name": "potassium iodide", "source": "aqueous value is the ion sum (H+(aq) = 0)", "dGf": { "aq": -334.07 } },
     { "formula": "CH3COONa", "name": "sodium acetate", "source": "sum of ionic values (H+(aq) = 0)", "dGf": { "aq": -631.31 } },
 
     { "formula": "CaCO3", "name": "calcium carbonate", "source": "CRC Handbook 84th ed. (calcite)", "dGf": { "s": -1128.79 } },
