@@ -10,6 +10,7 @@
  * read far better as imperative scripts; everything else is a pure query.
  */
 import { formatFormula } from "../core/formula.ts";
+import { isMetal, isNobleGas, preferredValence } from "./valence.ts";
 
 export type BondOrder = 1 | 2 | 3;
 
@@ -213,6 +214,37 @@ export function symbolCounts(mol: Molecule): Map<string, number> {
   const counts = new Map<string, number>();
   for (const atom of mol.atoms) counts.set(atom.symbol, (counts.get(atom.symbol) ?? 0) + 1);
   return counts;
+}
+
+export interface CompleteValencesOptions {
+  /** Leave charged atoms alone — an ion's hydrogens are stated, not inferred. */
+  skipCharged?: boolean;
+  /** Leave metals and noble gases alone: preferredValence models neither well. */
+  skipMetalsAndNobleGases?: boolean;
+}
+
+/**
+ * Tops up implicit hydrogens so each atom reaches its preferred valence
+ * (`bondedOrder + hydrogens`), and returns how many were added.
+ *
+ * Atoms already at or over capacity are untouched, so an explicit
+ * `S(=O)(=O)(O(H))(O(H))` is left alone. This is the one place hydrogens are
+ * inferred rather than written down, which is why it is opt-out per group.
+ */
+export function completeValences(mol: Molecule, options: CompleteValencesOptions = {}): number {
+  const { skipCharged = true, skipMetalsAndNobleGases = true } = options;
+  let added = 0;
+  for (const atom of mol.atoms) {
+    if (skipCharged && atom.charge !== 0) continue;
+    if (skipMetalsAndNobleGases && (isMetal(atom.symbol) || isNobleGas(atom.symbol))) continue;
+    const target = preferredValence(atom.symbol);
+    const used = bondedOrder(mol, atom.index) + atom.hydrogens;
+    if (target > used) {
+      atom.hydrogens += target - used;
+      added += target - used;
+    }
+  }
+  return added;
 }
 
 /** Structural copy — `cloneMolecule(build).` is how templates get reused safely. */
